@@ -89,7 +89,7 @@ Override the directory with `CHESS_COACH_DATA_DIR=/absolute/path`. The database,
 - Takeback and restart create a new branch identity. Late bot, analysis, or coaching events from the old branch are ignored; active Codex turns are interrupted when possible.
 - Coaching jobs are ordered within each game, while separate games have independent queues so one slow response cannot block another game.
 - Threefold repetition and the fifty-move rule are treated as automatic draws in iteration 1. This is the app's explicit local rules policy; no separate claim UI is required.
-- Verdicts are app estimates based on comparable Stockfish searches, not Chess.com or Lichess classifications. Mate scores are never treated as centipawns.
+- Verdicts are app estimates based on the change in estimated win chance between comparable Stockfish searches, not Chess.com or Lichess classifications. Mate scores are never treated as centipawns.
 - Opening recognition uses an offline, bundled ECO position book with more than 15,000 named positions. It recognizes transpositions and retains the deepest recognized name when play leaves its named book line.
 
 ## Troubleshooting

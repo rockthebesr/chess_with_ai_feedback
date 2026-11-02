@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moverLoss, verdictFor, whiteScore } from "../server/verdict.js";
+import { moverLoss, verdictFor, whiteScore, winChance, winChanceLoss } from "../server/verdict.js";
 
 describe("score orientation and verdicts", () => {
   it("normalizes engine scores to White's point of view", () => {
@@ -33,6 +33,22 @@ describe("score orientation and verdicts", () => {
   it("separates a blunder from an ordinary mistake", () => {
     expect(verdictFor({ cp: 0 }, { cp: -200 }, "white").verdict).toBe("Mistake");
     expect(verdictFor({ cp: 0 }, { cp: -900 }, "white").verdict).toBe("Blunder");
+  });
+
+  it("scales a loss by how much it changes the likely result", () => {
+    expect(verdictFor({ cp: 0 }, { cp: -150 }, "white").verdict).toBe("Mistake");
+    expect(verdictFor({ cp: 900 }, { cp: 750 }, "white")).toMatchObject({ verdict: "Good move", lossCp: 150 });
+    expect(verdictFor({ cp: -900 }, { cp: -1050 }, "white").verdict).toBe("Good move");
+    expect(verdictFor({ cp: 300 }, { cp: -600 }, "white").verdict).toBe("Blunder");
+  });
+
+  it("keeps win chance oriented to the mover and bounded", () => {
+    expect(winChance({ cp: 0 }, "white")).toBe(50);
+    expect(winChance({ cp: 200 }, "white")!).toBeCloseTo(100 - winChance({ cp: 200 }, "black")!);
+    expect(winChance({ mate: 2 }, "black")).toBe(0);
+    expect(winChance({ mate: 0 }, "black")).toBe(100);
+    expect(winChanceLoss({ cp: -100 }, { cp: 100 }, "white")).toBe(0);
+    expect(winChanceLoss({}, { cp: 100 }, "white")).toBeUndefined();
   });
 
   it("treats keeping, creating, and delivering mate as good moves", () => {

@@ -4,6 +4,10 @@ export interface Score { cp?: number; mate?: number }
 
 const STILL_WINNING_CP = 700;
 const LOSING_MATE_CP = 300;
+// Win-chance points lost. In a level position these match losing roughly 0.5, 1.3, and 3 pawns.
+const INACCURACY_LOSS = 5;
+const MISTAKE_LOSS = 12;
+const BLUNDER_LOSS = 25;
 
 export function whiteScore(score: Score, sideToMove: "w" | "b"): Score {
   const sign = sideToMove === "w" ? 1 : -1;
@@ -18,14 +22,30 @@ export function moverLoss(before: Score, after: Score, mover: "white" | "black")
   return mover === "white" ? before.cp - after.cp : after.cp - before.cp;
 }
 
+/** The mover's estimated chance of winning, 0 to 100, using the curve Lichess fitted to rated games. */
+export function winChance(score: Score, mover: "white" | "black"): number | undefined {
+  const sign = mover === "white" ? 1 : -1;
+  if (score.mate === 0) return 100;
+  if (score.mate !== undefined) return score.mate * sign > 0 ? 100 : 0;
+  if (score.cp === undefined) return undefined;
+  return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * score.cp * sign)) - 1);
+}
+
+export function winChanceLoss(before: Score, after: Score, mover: "white" | "black"): number | undefined {
+  const start = winChance(before, mover);
+  const end = winChance(after, mover);
+  return start === undefined || end === undefined ? undefined : Math.max(0, start - end);
+}
+
 export function verdictFor(before: Score, after: Score, mover: "white" | "black", forcedMove = false): { verdict: Verdict; lossCp?: number; note?: string } {
   if (forcedMove) return { verdict: "Good move", lossCp: moverLoss(before, after, mover), note: "This was the only legal move." };
   if (before.mate !== undefined || after.mate !== undefined) return mateVerdict(before, after, mover);
   const lossCp = moverLoss(before, after, mover);
   if (lossCp === undefined) return { verdict: "Analysis uncertain", note: "Comparable engine scores were unavailable." };
-  if (lossCp <= 45) return { verdict: "Good move", lossCp };
-  if (lossCp <= 130) return { verdict: "Inaccuracy", lossCp };
-  if (lossCp <= 300) return { verdict: "Mistake", lossCp };
+  const lost = winChanceLoss(before, after, mover) ?? 0;
+  if (lost < INACCURACY_LOSS) return { verdict: "Good move", lossCp };
+  if (lost < MISTAKE_LOSS) return { verdict: "Inaccuracy", lossCp };
+  if (lost < BLUNDER_LOSS) return { verdict: "Mistake", lossCp };
   return { verdict: "Blunder", lossCp };
 }
 

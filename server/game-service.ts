@@ -9,6 +9,7 @@ import { fallbackCoaching, type CoachProvider } from "./coach.js";
 import { recognizeOpening } from "./openings.js";
 import { Storage } from "./storage.js";
 import type { UciEngine } from "./uci.js";
+import { winChanceLoss } from "./verdict.js";
 
 const defaultSettings: GameSettings = {
   mode: "bot", whiteName: "Rock", blackName: "Coach Bot", humanColor: "white",
@@ -43,6 +44,10 @@ function resultFor(chess: Chess): { status: GameState["status"]; result: string;
 
 function botColor(game: GameState): "white" | "black" {
   return game.settings.humanColor === "white" ? "black" : "white";
+}
+
+function moveWinChanceLoss({ move, analysis }: { move: MoveRecord; analysis: AnalysisRecord }): number {
+  return winChanceLoss({ cp: analysis.beforeCp, mate: analysis.beforeMate }, { cp: analysis.afterCp, mate: analysis.afterMate }, move.mover) ?? 0;
 }
 
 const BOT_THINKING_MS = 850;
@@ -350,7 +355,7 @@ export class GameService {
     const completed = game.moves.map((move) => ({ move, analysis: game.analysis[move.id] })).filter((item) => item.analysis?.status === "complete");
     const keyMoments = completed
       .filter((item) => item.analysis.verdict !== "Good move")
-      .sort((a, b) => (b.analysis.lossCp ?? 0) - (a.analysis.lossCp ?? 0))
+      .sort((a, b) => moveWinChanceLoss(b) - moveWinChanceLoss(a))
       .slice(0, 3)
       .map((item) => `${item.move.ply}. ${item.move.san}: ${item.analysis.verdict === "Blunder" ? "This move badly damaged the position" : item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`);
     const lessons = keyMoments.length
