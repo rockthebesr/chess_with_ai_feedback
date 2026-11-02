@@ -53,8 +53,6 @@ The browser shows that text verbatim. To add coaching content, add a fact and in
 
 When hints are hidden (`hintsVisible: false`), coaching must not reveal a live next move.
 
-In `coach.ts`, the free-text validators and prompt (`validateCoachOutput`, `validateFollowUpOutput`, `buildCoachPrompt`, `hasUnverifiedMoveAdvice`, and the related claim checks) are not called by production code; only `tests/coach-policy.test.ts` uses them. Passing those tests says nothing about the live selection path.
-
 ### Providers and fallbacks
 
 Everything implements `CoachProvider`. `PreferredCoachProvider` (`local-coach.ts`) tries Ollama first, then fails over to `CodexCoachProvider` (`codex app-server` over stdio) with one final attempt. A failed request only moves later requests to the cloud if the Ollama health check also fails. `refresh()` runs before each coaching job and rechecks at most every 30 seconds, returning to local once it recovers. If coaching fails or is unavailable, `fallbackCoaching` produces deterministic text. Without Stockfish, `fallbackAnalysis` gives a material-only result with the verdict "Analysis uncertain".

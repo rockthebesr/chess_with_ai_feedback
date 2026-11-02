@@ -33,13 +33,10 @@ export interface CoachingFacts {
   newlyOutranked: Array<{ square: string; piece: string; attackerSquare: string; attacker: string }>;
   /** The engine's best answer to this move, replayed on the board. */
   reply?: { san: string; capturedPiece?: string; capturedSquare?: string; gaveCheck: boolean; materialLost: number };
-  materialGain: number;
   materialSwing: number;
   developedFromHome: boolean;
   castled: boolean;
   centralPawnMove: boolean;
-  /** Legacy free-text guard. Geometric king-protection claims are never trusted. */
-  supportsOwnKing: boolean;
 }
 
 const pieceValues: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
@@ -115,7 +112,6 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
     return pieceValues[target.type] > movedValue || !legalDefenders(before, square as Square, opponent).length ? [{ square, piece: pieceNames[target.type] }] : [];
   });
   const lineMotifs = findLineMotifs(before, applied.to, applied.promotion ?? applied.piece, applied.color);
-  const materialGain = applied.captured ? pieceValues[applied.captured] : 0;
   const materialSwing = materialBalance(afterCounts, applied.color) - materialBalance(beforeCounts, applied.color);
   const developedFromHome = ["n", "b"].includes(applied.piece) && homeSquares[applied.piece].includes(applied.from);
   const castled = applied.isKingsideCastle() || applied.isQueensideCastle();
@@ -138,7 +134,7 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
   if (opening) facts.push({ id: "opening", text: opening.guidanceAvailable
     ? `At this move the opening was ${opening.name}${opening.current ? "" : " (the game had left the named book line)"}. The mover's verified stored plan was: ${moverColor === "w" ? opening.plansWhite : opening.plansBlack}`
     : `At this move the position book identified ${opening.name}${opening.current ? "" : " before the game left the named line"}; no opening-specific strategic plan is stored.` });
-  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, forkTargets, movedPieceOutranked, newlyOutranked, reply, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
+  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, forkTargets, movedPieceOutranked, newlyOutranked, reply, materialSwing, developedFromHome, castled, centralPawnMove };
 }
 
 export function factsPacket(facts: CoachingFacts): object {
@@ -243,7 +239,7 @@ function motifType(front: string, behind: string, frontCanCaptureAttacker: boole
   return "x-ray";
 }
 
-export function attacksForPiece(chess: Chess, square: Square, piece: string, color: "w" | "b"): string[] {
+function attacksForPiece(chess: Chess, square: Square, piece: string, color: "w" | "b"): string[] {
   const file = square.charCodeAt(0) - 97; const rank = Number(square[1]) - 1;
   const jumps = piece === "n" ? [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]
     : piece === "k" ? [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
