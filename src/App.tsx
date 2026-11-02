@@ -156,6 +156,8 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
   const [manualOrientation, setManualOrientation] = useState<"white" | "black">(initialOrientation);
   const [review, setReview] = useState<{ fen: string; legalMoves: GameState["legalMoves"]; label: string; ply?: number; lastMove?: { from: string; to: string } }>();
   const [summary, setSummary] = useState<GameReviewSummary>();
+  const [summaryFailed, setSummaryFailed] = useState(false);
+  const [summaryAttempt, setSummaryAttempt] = useState(0);
   const [practice, setPractice] = useState<PracticeState>();
   const [boardTheme, setBoardTheme] = useState(() => appearanceFor(game).boardTheme);
   const [pieceStyle, setPieceStyle] = useState(() => appearanceFor(game).pieceStyle);
@@ -218,7 +220,13 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
   }, [game.status, game.moves, review?.ply, practice]);
   // Refetch as verdicts land: the last live analysis and the post-game recheck both arrive after the game ends.
   const verdicts = game.moves.map((move) => game.analysis[move.id]?.verdict).join();
-  useEffect(() => { if (game.status === "complete") void api.summary(game.id).then(setSummary); }, [game.status, game.id, verdicts]);
+  useEffect(() => {
+    if (game.status !== "complete") return;
+    let current = true;
+    setSummaryFailed(false);
+    api.summary(game.id).then((loaded) => { if (current) setSummary(loaded); }).catch(() => { if (current) setSummaryFailed(true); });
+    return () => { current = false; };
+  }, [game.status, game.id, verdicts, summaryAttempt]);
   useEffect(() => { if (game.settings.mode === "local" && game.settings.autoFlip) setManualOrientation(game.turn); }, [game.turn, game.settings.mode, game.settings.autoFlip]);
   useEffect(() => { const appearance = appearanceFor(game); setBoardTheme(appearance.boardTheme); setPieceStyle(appearance.pieceStyle); }, [game.id]);
 
@@ -240,7 +248,7 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
         {game.paused && <section className="pause-card"><span>Lesson pause</span><p>You can read the latest feedback now, or continue even if coaching is still arriving.</p><button className="primary" onClick={() => void update(api.continue(game.id, game.revision))}>Continue game →</button></section>}
         {game.opening ? <OpeningCard game={game} /> : game.moves.length > 1 && <section className="unknown-opening"><small>OPENING</small><strong>Outside the starter catalog</strong><p>The moves are legal, but this position has no supported name in the local opening set.</p></section>}
         {practice && <PracticePanel state={practice} onRetry={() => showPractice(practice.index)} onReveal={() => setPractice({ ...practice, revealed: true })} onNext={() => showPractice(practice.index + 1)} onExit={() => setPractice(undefined)} />}
-        {game.status === "complete" && !practice && <Postgame game={game} summary={summary} ply={review?.ply} practiceCount={coachedMoves.filter((move) => { const analysis = game.analysis[move.id]; return analysis?.status === "complete" && (analysis.verdict === "Mistake" || analysis.verdict === "Blunder"); }).length} onPractice={() => void startPractice()} onSelectPly={showPly} onReview={(fen, line) => setReview(reviewFromLine(fen, line))} />}
+        {game.status === "complete" && !practice && <Postgame game={game} summary={summary} summaryFailed={summaryFailed} onRetrySummary={() => setSummaryAttempt((value) => value + 1)} ply={review?.ply} practiceCount={coachedMoves.filter((move) => { const analysis = game.analysis[move.id]; return analysis?.status === "complete" && (analysis.verdict === "Mistake" || analysis.verdict === "Blunder"); }).length} onPractice={() => void startPractice()} onSelectPly={showPly} onReview={(fen, line) => setReview(reviewFromLine(fen, line))} />}
         <section className="moves-section"><div className="section-heading"><h2>{game.settings.mode === "bot" ? "Your coaching" : "Move-by-move coaching"}</h2><span>{coachedMoves.length} {coachedMoves.length === 1 ? "move" : "moves"}</span></div>
           {!coachedMoves.length && <div className="empty"><span>♙</span><h3>Your first lesson starts with your first move.</h3><p>Click or drag a piece. Legal destinations will light up.</p></div>}
           <div className="move-feed">{[...coachedMoves].reverse().map((move) => <MoveCard key={move.id} game={game} moveId={move.id} provider={provider} stockfish={stockfish} onReview={(line) => setReview(reviewFromLine(move.beforeFen, line))} />)}</div>
@@ -294,6 +302,6 @@ function Verdict({ verdict, pending }: { verdict?: string; pending: boolean }) {
   return <span className={`verdict ${pending ? "pending" : verdict?.toLowerCase().replaceAll(" ", "-")}`}>{pending ? "Thinking" : friendly}</span>;
 }
 
-function Postgame({ game, summary, ply, practiceCount, onPractice, onSelectPly, onReview }: { game: GameState; summary?: GameReviewSummary; ply?: number; practiceCount: number; onPractice: () => void; onSelectPly: (ply: number) => void; onReview: (fen: string, line?: CandidateLine) => void }) {
-  return <section className="postgame"><div className="section-heading"><h2>Game review</h2><a href={`/api/games/${game.id}/pgn`} download>Export PGN</a></div><GameReview game={game} summary={summary} ply={ply} onSelect={onSelectPly} />{!summary ? <p>Building recap…</p> : <><h3>Key moments</h3><ul>{summary.keyMoments.map((item) => <li key={item}>{item}</li>)}</ul><h3>Practical lessons</h3><ul>{summary.lessons.map((item) => <li key={item}>{item}</li>)}</ul>{summary.missing > 0 && <small>{summary.missing} move(s) did not receive full engine analysis.</small>}</>}<div className="postgame-actions">{practiceCount > 0 && <button className="practice-start" onClick={onPractice}>Practice your mistakes ({practiceCount})</button>}<button onClick={() => onReview(game.moves[0]?.beforeFen ?? new Chess().fen())}>Open a separate review board</button></div></section>;
+function Postgame({ game, summary, summaryFailed, onRetrySummary, ply, practiceCount, onPractice, onSelectPly, onReview }: { game: GameState; summary?: GameReviewSummary; summaryFailed: boolean; onRetrySummary: () => void; ply?: number; practiceCount: number; onPractice: () => void; onSelectPly: (ply: number) => void; onReview: (fen: string, line?: CandidateLine) => void }) {
+  return <section className="postgame"><div className="section-heading"><h2>Game review</h2><a href={`/api/games/${game.id}/pgn`} download>Export PGN</a></div><GameReview game={game} summary={summary} ply={ply} onSelect={onSelectPly} />{!summary ? summaryFailed ? <p className="recap-error">The recap could not be loaded. <button onClick={onRetrySummary}>Try again</button></p> : <p>Building recap…</p> : <><h3>Key moments</h3><ul>{summary.keyMoments.map((item) => <li key={item}>{item}</li>)}</ul><h3>Practical lessons</h3><ul>{summary.lessons.map((item) => <li key={item}>{item}</li>)}</ul>{summary.missing > 0 && <small>{summary.missing} move(s) did not receive full engine analysis.</small>}</>}<div className="postgame-actions">{practiceCount > 0 && <button className="practice-start" onClick={onPractice}>Practice your mistakes ({practiceCount})</button>}<button onClick={() => onReview(game.moves[0]?.beforeFen ?? new Chess().fen())}>Open a separate review board</button></div></section>;
 }

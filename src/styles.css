@@ -134,6 +134,7 @@ input:focus, select:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px 
 .postgame .review-move { padding: 3px 6px; font-size: .74rem; border-radius: 5px; }
 .postgame .review-move.inaccuracy { background: #f5e8c7; color: #87681f; }.postgame .review-move.mistake { background: #f6ded8; color: #a44232; }.postgame .review-move.blunder { background: #a44232; color: #fff; }.postgame .review-move.current { outline: 2px solid var(--gold); outline-offset: 1px; }
 .review-hint { color: var(--muted); font-size: .72rem; }
+.recap-error { color: #9a4434; }
 
 .postgame-actions { display: flex; flex-wrap: wrap; gap: 8px; }.postgame .practice-start { background: #244d3b; border-color: #244d3b; color: #fff; }
 .practice-card { background: #fff7df; border: 1px solid #e4d3a6; border-radius: 14px; padding: 17px; font-size: .9rem; }.practice-card p { margin: 10px 0; }
