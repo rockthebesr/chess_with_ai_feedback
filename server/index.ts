@@ -77,6 +77,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
       return json(res, 200, { games: games.list(), provider: games.providerStatus(), stockfish: { available: Boolean(stockfishPath), path: stockfishPath ? "configured" : undefined } });
     }
+    if (req.method === "GET" && url.pathname === "/api/patterns") return json(res, 200, games.patterns());
     if (req.method === "POST" && url.pathname === "/api/games") {
       return json(res, 201, games.create(settingsSchema.parse(await body(req))));
     }

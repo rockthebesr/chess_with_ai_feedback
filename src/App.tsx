@@ -1,6 +1,6 @@
 import { Chess } from "chess.js";
 import { useEffect, useState } from "react";
-import type { CandidateLine, GameReviewSummary, GameSettings, GameState, GameSummary, ProviderStatus, ServerEvent } from "../shared/types";
+import type { CandidateLine, GameReviewSummary, GameSettings, GameState, GameSummary, PlayerPatterns, ProviderStatus, ServerEvent } from "../shared/types";
 import { api, connectEvents } from "./api";
 import { ChessBoard } from "./ChessBoard";
 import { GameReview, moveLabel } from "./GameReview";
@@ -98,6 +98,8 @@ function Home({ games, provider, stockfish, error, onCreate, onResume, onDelete,
   const [settings, setSettings] = useState<GameSettings>(saved ? { ...initialSettings, ...JSON.parse(saved) } : initialSettings);
   const update = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => setSettings((old) => ({ ...old, [key]: value }));
   const start = () => { localStorage.setItem("chess-coach-settings", JSON.stringify(settings)); onCreate(settings); };
+  const [patterns, setPatterns] = useState<PlayerPatterns[]>([]);
+  useEffect(() => { void api.patterns().then(setPatterns).catch(() => setPatterns([])); }, [games.length]);
   return <main className="home-shell">
     <header className="hero"><span className="eyebrow">A quiet place to learn together</span><h1>Local Chess Coach</h1><p>Play a real game. Get a clear lesson after every move.</p></header>
     {error && <div className="alert">{error}</div>}
@@ -121,9 +123,25 @@ function Home({ games, provider, stockfish, error, onCreate, onResume, onDelete,
         <div className="card status-card"><h3>Ready check</h3><StatusDot ok={provider.available} label={provider.available ? `${provider.authMode === "local" ? "Local coaching" : "ChatGPT coaching"} · ${provider.planType ?? "ready"}` : "Coaching fallback"} detail={provider.available ? provider.model : provider.error} />
           <StatusDot ok={stockfish} label={stockfish ? "Stockfish analysis" : "Rules-based analysis"} detail={stockfish ? "Local engine ready" : "Install Stockfish for deeper feedback"} /></div>
         <div className="card saved"><div className="saved-heading"><h3>Saved games</h3>{games.length > 0 && <button className="saved-delete-all" onClick={onDeleteAll}>Delete all</button>}</div>{games.length === 0 ? <p className="muted">Your games will appear here automatically.</p> : games.slice(0, 8).map((item) => <div className="saved-row" key={item.id}><button className="saved-open" onClick={() => onResume(item.id)}><span><strong>{item.whiteName} vs {item.blackName}</strong><small>{item.moveCount} moves · {item.status === "active" ? "In progress" : item.result}</small></span><span>›</span></button><button className="saved-delete" aria-label={`Delete ${item.whiteName} versus ${item.blackName}`} title="Delete saved game" onClick={() => onDelete(item.id)}>Delete</button></div>)}</div>
+        <PatternsCard players={patterns} />
       </aside>
     </section>
   </main>;
+}
+
+// Too few mistakes make a percentage look more meaningful than it is.
+const MIN_MISTAKES_FOR_PATTERNS = 3;
+
+function PatternsCard({ players }: { players: PlayerPatterns[] }) {
+  const ready = players.filter((player) => player.mistakes >= MIN_MISTAKES_FOR_PATTERNS);
+  return <div className="card patterns"><h3>Mistake patterns</h3>
+    {!ready.length && <p className="muted">Finish a few games and your most common mistakes will appear here.</p>}
+    {ready.map((player) => <div className="pattern-player" key={player.name}>
+      <strong>{player.name}</strong><small>{player.mistakes} mistakes across {player.games} {player.games === 1 ? "game" : "games"}</small>
+      <ul>{player.patterns.slice(0, 4).map((pattern) => <li key={pattern.id}><span>{pattern.label}</span><b>{pattern.share}%</b><i style={{ width: `${pattern.share}%` }} /></li>)}</ul>
+      <p className="pattern-advice">{player.patterns[0].advice}</p>
+    </div>)}
+  </div>;
 }
 
 function StatusDot({ ok, label, detail }: { ok: boolean; label: string; detail?: string }) {

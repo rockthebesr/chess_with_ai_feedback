@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Chess } from "chess.js";
 import type {
-  AnalysisRecord, CoachingRecord, GameReviewSummary, GameSettings, GameState, GameSummary, MoveRecord,
-  PracticePosition, PracticeResult, ProviderStatus, ServerEvent,
+  AnalysisRecord, CoachingRecord, GameReviewSummary, GameSettings, GameState, GameSummary, MistakePattern, MoveRecord,
+  PlayerPatterns, PracticePosition, PracticeResult, ProviderStatus, ServerEvent,
 } from "../shared/types.js";
 import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
 import { fallbackCoaching, type CoachProvider } from "./coach.js";
 import { recognizeOpening } from "./openings.js";
+import { classifyMistake, summarizePatterns } from "./patterns.js";
 import { Storage } from "./storage.js";
 import type { UciEngine } from "./uci.js";
 import { moveAccuracy, winChance, winChanceLoss } from "./verdict.js";
@@ -64,6 +65,7 @@ export class GameService {
   private tasks = new Set<Promise<unknown>>();
   private announcedProvider: string;
   private recheckedBranches = new Set<string>();
+  private classifiedMistakes = new Map<string, MistakePattern>();
 
   constructor(
     readonly storage: Storage,
@@ -415,6 +417,19 @@ export class GameService {
       keyMoments: keyMoments.length ? keyMoments : ["No major engine swing was recorded."], lessons, missing: game.moves.length - completed.length,
       accuracy: { white: averageAccuracy("white"), black: averageAccuracy("black") }, evaluation,
     };
+  }
+
+  patterns(): PlayerPatterns[] {
+    const games = this.list().flatMap((summary) => this.get(summary.id) ?? []);
+    // Classifying replays the board, so keep the answers: this runs every time the home screen opens.
+    return summarizePatterns(games, (move, analysis) => {
+      const key = `${move.id}:${analysis.budgetMs}:${analysis.verdict}`;
+      const known = this.classifiedMistakes.get(key);
+      if (known) return known;
+      const pattern = classifyMistake(move, analysis);
+      this.classifiedMistakes.set(key, pattern);
+      return pattern;
+    });
   }
 
   practicePositions(id: string): PracticePosition[] {
