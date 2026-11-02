@@ -50,6 +50,10 @@ function moveWinChanceLoss({ move, analysis }: { move: MoveRecord; analysis: Ana
   return winChanceLoss({ cp: analysis.beforeCp, mate: analysis.beforeMate }, { cp: analysis.afterCp, mate: analysis.afterMate }, move.mover) ?? 0;
 }
 
+const LIVE_ANALYSIS_MS = 450;
+const RECHECK_ANALYSIS_MS = 1500;
+// Moves this close to the inaccuracy line can flip between searches, so they are rechecked too.
+const RECHECK_MIN_LOSS = 3;
 const BOT_THINKING_MS = 850;
 function wait(ms: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
@@ -58,6 +62,7 @@ export class GameService {
   private coachingChains = new Map<string, Promise<void>>();
   private tasks = new Set<Promise<unknown>>();
   private announcedProvider: string;
+  private recheckedBranches = new Set<string>();
 
   constructor(
     readonly storage: Storage,
@@ -139,7 +144,7 @@ export class GameService {
     game.revision = moveRevision;
     game.moves.push(record);
     game.analysis[record.id] = {
-      moveId: record.id, status: "pending", verdict: "Analysis uncertain", budgetMs: 450,
+      moveId: record.id, status: "pending", verdict: "Analysis uncertain", budgetMs: LIVE_ANALYSIS_MS,
       engine: this.analysisEngine?.version ?? "rules fallback", alternatives: [],
     };
     game.coaching[record.id] = { moveId: record.id, status: source === "bot" ? "skipped" : "queued" };
@@ -154,7 +159,7 @@ export class GameService {
   }
 
   private async runAnalysis(gameId: string, move: MoveRecord, legalMoveCount: number): Promise<void> {
-    const analysis = await analyzeMove(this.analysisEngine, move, legalMoveCount, 450);
+    const analysis = await analyzeMove(this.analysisEngine, move, legalMoveCount, LIVE_ANALYSIS_MS);
     const game = this.get(gameId);
     if (!game || !this.isCurrentMove(game, move)) return;
     game.analysis[move.id] = analysis;
@@ -162,6 +167,38 @@ export class GameService {
     this.storage.saveGame(game);
     this.emit({ type: "analysis.updated", gameId, moveId: move.id, analysis });
     if (game.coaching[move.id]?.status !== "skipped") this.enqueueCoaching(gameId, move);
+    this.scheduleRecheck(game);
+  }
+
+  /** Runs once per finished branch, after the last live analysis lands. */
+  private scheduleRecheck(game: GameState): void {
+    if (!this.analysisEngine || game.status !== "complete" || this.recheckedBranches.has(game.branchId)) return;
+    if (game.moves.some((move) => game.analysis[move.id]?.status === "pending")) return;
+    this.recheckedBranches.add(game.branchId);
+    this.track(this.recheckVerdicts(game.id, game.branchId));
+  }
+
+  /** Live searches are short, so verdicts that could matter get a longer look once nobody is waiting on them. */
+  private async recheckVerdicts(gameId: string, branchId: string): Promise<void> {
+    const moves = this.get(gameId)?.moves ?? [];
+    for (const move of moves) {
+      const current = this.get(gameId)?.analysis[move.id];
+      if (!current || current.status !== "complete" || !this.worthRechecking(move, current)) continue;
+      const rechecked = await analyzeMove(this.analysisEngine, move, new Chess(move.beforeFen).moves().length, RECHECK_ANALYSIS_MS);
+      const game = this.get(gameId);
+      if (!game || game.branchId !== branchId || !this.isCurrentMove(game, move)) return;
+      if (rechecked.status !== "complete") continue;
+      game.analysis[move.id] = { ...rechecked, rechecked: true };
+      game.updatedAt = now();
+      this.storage.saveGame(game);
+      this.emit({ type: "analysis.updated", gameId, moveId: move.id, analysis: game.analysis[move.id] });
+      const coachingStatus = game.coaching[move.id]?.status;
+      if (rechecked.verdict !== current.verdict && coachingStatus !== "skipped") this.enqueueCoaching(gameId, move);
+    }
+  }
+
+  private worthRechecking(move: MoveRecord, analysis: AnalysisRecord): boolean {
+    return !analysis.rechecked && (analysis.verdict !== "Good move" || moveWinChanceLoss({ move, analysis }) >= RECHECK_MIN_LOSS);
   }
 
   private enqueueCoaching(gameId: string, move: MoveRecord): void {
@@ -173,12 +210,12 @@ export class GameService {
       const analysis = game.analysis[move.id];
       const openingAtMove = recognizeOpening(game.moves.slice(0, move.ply).map((item) => item.san));
       if (!this.coach.status().available) {
-        game.coaching[move.id] = fallbackCoaching(move, analysis, openingAtMove);
+        game.coaching[move.id] = { ...fallbackCoaching(move, analysis, openingAtMove), followups: game.coaching[move.id]?.followups };
         this.storage.saveGame(game);
         this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: game.coaching[move.id] });
         return;
       }
-      const streaming: CoachingRecord = { moveId: move.id, status: "streaming", streamedText: "" };
+      const streaming: CoachingRecord = { moveId: move.id, status: "streaming", streamedText: "", followups: game.coaching[move.id]?.followups };
       game.coaching[move.id] = streaming;
       this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: streaming });
       try {
@@ -197,6 +234,7 @@ export class GameService {
           moveId: move.id, status: "complete", verdict: result.verdict,
           explanation: result.explanation, lesson: result.lesson,
           provider: source.authMode === "local" ? "Local Gemma" : "Codex App Server", model: source.model,
+          followups: latest.coaching[move.id]?.followups,
         };
         this.storage.saveGame(latest);
         this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: latest.coaching[move.id] });
@@ -206,6 +244,7 @@ export class GameService {
         if (!latest || !this.isCurrentMove(latest, move)) return;
         const fallback = fallbackCoaching(move, analysis, recognizeOpening(latest.moves.slice(0, move.ply).map((item) => item.san)));
         fallback.error = error instanceof Error ? error.message : "Coaching failed.";
+        fallback.followups = latest.coaching[move.id]?.followups;
         latest.coaching[move.id] = fallback;
         this.storage.saveGame(latest);
         this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: fallback });
@@ -307,7 +346,7 @@ export class GameService {
     const resigning = color ?? game.turn;
     game.status = "complete"; game.result = resigning === "white" ? "0-1" : "1-0";
     game.resultReason = `${resigning} resigned`; game.paused = false; game.revision += 1;
-    this.persistAndEmit(game); return game;
+    this.persistAndEmit(game); this.scheduleRecheck(game); return game;
   }
 
   agreeDraw(id: string): GameState {
@@ -315,7 +354,7 @@ export class GameService {
     if (game.status !== "active") throw new ServiceError(409, "This game has ended.");
     if (game.settings.mode !== "local") throw new ServiceError(409, "Draw by agreement is available only in two-player games.");
     game.status = "complete"; game.result = "1/2-1/2"; game.resultReason = "draw by agreement";
-    game.paused = false; game.revision += 1; this.persistAndEmit(game); return game;
+    game.paused = false; game.revision += 1; this.persistAndEmit(game); this.scheduleRecheck(game); return game;
   }
 
   async ask(id: string, moveId: string, question: string): Promise<string> {

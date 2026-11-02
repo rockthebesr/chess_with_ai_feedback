@@ -203,4 +203,86 @@ describe("authoritative game service", () => {
     expect(storage.loadGame(second.id)).toBeUndefined();
     storage.close();
   });
+
+  describe("post-game verdict recheck", () => {
+    // Scores keyed by search budget, so the longer pass can disagree with the live one.
+    function recheckSetup(scoreFor: (fen: string, ms: number) => number) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+      const storage = new Storage(dir);
+      const coached: string[] = [];
+      const coach: CoachProvider = {
+        status: () => ({ available: true, authMode: "local", model: "test" }), initialize: async () => ({ available: true }),
+        coach: async (_game, move, analysis) => { coached.push(`${move.san}:${analysis.verdict}`); return { moveId: move.id, verdict: analysis.verdict, explanation: `about ${analysis.verdict}`, lesson: "lesson" }; },
+        followUp: async () => "answer", cancel: async () => undefined, close: () => undefined,
+      };
+      const searches: number[] = [];
+      const engine = {
+        version: "fake",
+        analyze: async (fen: string, ms: number) => {
+          searches.push(ms);
+          return { bestMove: "e2e4", lines: [{ multipv: 1, depth: 10, cp: scoreFor(fen, ms), moves: [] }] };
+        },
+      } as unknown as UciEngine;
+      return { service: new GameService(storage, coach, engine, engine, () => undefined), storage, coached, searches };
+    }
+    const LONG = 1500;
+    // Scores are from the side to move, so White loses 400 after e4 when Black then sees +400.
+    const afterE4 = (fen: string) => fen.includes(" b ");
+
+    it("replaces a verdict the longer search disagrees with and re-coaches it", async () => {
+      const { service, storage, coached } = recheckSetup((fen, ms) => afterE4(fen) && ms < LONG ? 400 : 0);
+      const game = service.create({ mode: "local" });
+      await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+      await service.idle();
+      expect(service.get(game.id)!.analysis[service.get(game.id)!.moves[0].id].verdict).toBe("Blunder");
+      service.resign(game.id, "white");
+      await service.idle();
+      const finished = service.get(game.id)!; const move = finished.moves[0];
+      expect(finished.analysis[move.id]).toMatchObject({ verdict: "Good move", rechecked: true, budgetMs: LONG });
+      expect(coached).toEqual(["e4:Blunder", "e4:Good move"]);
+      expect(finished.coaching[move.id].explanation).toBe("about Good move");
+      expect(storage.loadGame(game.id)!.analysis[move.id].rechecked).toBe(true);
+      storage.close();
+    });
+
+    it("keeps follow-up answers when a move is re-coached", async () => {
+      const { service, storage } = recheckSetup((fen, ms) => afterE4(fen) && ms < LONG ? 400 : 0);
+      const game = service.create({ mode: "local" });
+      await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+      await service.idle();
+      await service.ask(game.id, service.get(game.id)!.moves[0].id, "Why?");
+      service.resign(game.id, "white");
+      await service.idle();
+      const finished = service.get(game.id)!;
+      expect(finished.coaching[finished.moves[0].id].followups).toHaveLength(1);
+      storage.close();
+    });
+
+    it("skips clearly good moves and does not re-coach an unchanged verdict", async () => {
+      const { service, storage, coached, searches } = recheckSetup(() => 0);
+      const game = service.create({ mode: "local" });
+      await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+      await service.idle();
+      service.resign(game.id, "white");
+      await service.idle();
+      expect(searches).not.toContain(LONG);
+      expect(coached).toHaveLength(1);
+      storage.close();
+    });
+
+    it("drops a recheck when the finished game is taken back", async () => {
+      const { service, storage } = recheckSetup((fen) => afterE4(fen) ? 400 : 0);
+      const game = service.create({ mode: "local" });
+      await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+      await service.idle();
+      const moveId = service.get(game.id)!.moves[0].id;
+      service.resign(game.id, "white");
+      await service.undo(game.id);
+      await service.idle();
+      const latest = service.get(game.id)!;
+      expect(latest.moves).toHaveLength(0);
+      expect(latest.analysis[moveId]).toBeUndefined();
+      storage.close();
+    });
+  });
 });

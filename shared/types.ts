@@ -56,6 +56,8 @@ export interface AnalysisRecord {
   alternatives: CandidateLine[];
   continuation?: CandidateLine;
   note?: string;
+  /** Set once the post-game pass has rechecked this verdict with a longer search. */
+  rechecked?: boolean;
 }
 
 export interface CoachingRecord {
