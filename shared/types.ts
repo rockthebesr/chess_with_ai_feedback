@@ -58,6 +58,8 @@ export interface AnalysisRecord {
   note?: string;
   /** Set once the post-game pass has rechecked this verdict with a longer search. */
   rechecked?: boolean;
+  /** Set when the live and post-game searches agree on the opponent's best reply. */
+  replyConfirmed?: boolean;
 }
 
 export interface CoachingRecord {

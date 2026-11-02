@@ -369,6 +369,8 @@ function opponentReplyInsight(
       explanation: `After ${move.san}, your opponent can answer ${reply.san}, capturing your ${reply.capturedPiece} on ${reply.capturedSquare}.${gain}`,
     };
   }
+  // A quiet best reply can change with a longer search, so only name one that two searches agree on.
+  if (!analysis.replyConfirmed) return undefined;
   return {
     id: "opponent-reply",
     kind: "opponent-reply",

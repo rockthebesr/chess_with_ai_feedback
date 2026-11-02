@@ -321,7 +321,10 @@ describe("authoritative game service", () => {
 
   describe("post-game verdict recheck", () => {
     // Scores keyed by search budget, so the longer pass can disagree with the live one.
-    function recheckSetup(scoreFor: (fen: string, ms: number) => number) {
+    function recheckSetup(
+      scoreFor: (fen: string, ms: number) => number,
+      replyFor: (ms: number) => string = () => "e7e5",
+    ) {
       const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
       dirs.push(dir);
       const storage = new Storage(dir);
@@ -347,7 +350,8 @@ describe("authoritative game service", () => {
         version: "fake",
         analyze: async (fen: string, ms: number) => {
           searches.push(ms);
-          return { bestMove: "e2e4", lines: [{ multipv: 1, depth: 10, cp: scoreFor(fen, ms), moves: [] }] };
+          const moves = fen.includes(" b ") ? [replyFor(ms)] : ["e2e4"];
+          return { bestMove: "e2e4", lines: [{ multipv: 1, depth: 10, cp: scoreFor(fen, ms), moves }] };
         },
       } as unknown as UciEngine;
       return { service: new GameService(storage, coach, engine, engine, () => undefined), storage, coached, searches };
@@ -370,6 +374,22 @@ describe("authoritative game service", () => {
       expect(coached).toEqual(["e4:Blunder", "e4:Good move"]);
       expect(finished.coaching[move.id].explanation).toBe("about Good move");
       expect(storage.loadGame(game.id)!.analysis[move.id].rechecked).toBe(true);
+      storage.close();
+    });
+
+    it("records whether the two searches agree on the reply", async () => {
+      const replies: Record<number, string> = { 450: "e7e5", 1500: "c7c5" };
+      const { service, storage } = recheckSetup(
+        (fen) => (afterE4(fen) ? 400 : 0),
+        (ms) => replies[ms],
+      );
+      const game = service.create({ mode: "local" });
+      await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+      await service.idle();
+      service.resign(game.id, "white");
+      await service.idle();
+      const finished = service.get(game.id)!;
+      expect(finished.analysis[finished.moves[0].id]).toMatchObject({ rechecked: true, replyConfirmed: false });
       storage.close();
     });
 

@@ -348,6 +348,15 @@ describe("verified coaching insights", () => {
       expect(replyInsight(mate, false)[0].explanation).toBe("Ne4 lets your opponent force checkmate.");
     });
 
+    it("names a quiet reply only once two searches agree on it", () => {
+      const quiet = bad(["d5d4"]);
+      expect(replyInsight(quiet, true).some((item) => item.id === "opponent-reply")).toBe(false);
+      const confirmed = replyInsight({ ...quiet, replyConfirmed: true }, true).find(
+        (item) => item.id === "opponent-reply",
+      );
+      expect(confirmed?.explanation).toBe("After Ne4, your opponent's strongest answer is d4.");
+    });
+
     it("stays quiet for good moves and when no reply was found", () => {
       const good = { ...bad(["d5e4", "e1e2"]), verdict: "Good move" as const };
       expect(replyInsight(good, true).some((item) => item.id === "opponent-reply")).toBe(false);

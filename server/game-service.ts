@@ -265,7 +265,12 @@ export class GameService {
       const game = this.get(gameId);
       if (!game || game.branchId !== branchId || !this.isCurrentMove(game, move)) return;
       if (rechecked.status !== "complete") continue;
-      game.analysis[move.id] = { ...rechecked, rechecked: true };
+      game.analysis[move.id] = {
+        ...rechecked,
+        rechecked: true,
+        replyConfirmed:
+          Boolean(current.continuation) && current.continuation?.uci[0] === rechecked.continuation?.uci[0],
+      };
       game.updatedAt = now();
       this.storage.saveGame(game);
       this.emit({ type: "analysis.updated", gameId, moveId: move.id, analysis: game.analysis[move.id] });
