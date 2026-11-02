@@ -63,13 +63,14 @@ export function buildVerifiedInsights(move: MoveRecord, analysis: AnalysisRecord
       explanation: `${move.san} places your ${facts.movingPiece} where it can legally capture the ${target.piece} on ${target.square}.`,
       lesson: `Check whether that ${target.piece} can move, be defended, or answer with a stronger threat.`, evidenceIds: ["played_move", "new_attacks"] });
   }
-  if (facts.newlyAttackedPieces.length >= 2) insights.push({ id: "piece-fork", kind: "fork", priority: 88,
-    explanation: `${move.san} makes your ${facts.movingPiece} attack ${facts.newlyAttackedPieces.slice(0, 2).map((item) => `the ${item.piece} on ${item.square}`).join(" and ")}.`,
+  if (facts.forkTargets.length >= 2) insights.push({ id: "piece-fork", kind: "fork", priority: 88,
+    explanation: `${move.san} makes your ${facts.movingPiece} attack ${facts.forkTargets.slice(0, 2).map((item) => `the ${item.piece} on ${item.square}`).join(" and ")}.`,
     lesson: "For a fork to work, check whether either target can answer with check, capture the attacker, or save both pieces.", evidenceIds: ["played_move", "new_attacks"] });
-  if (facts.lineMotifs.length) {
-    const motif = facts.lineMotifs[0];
+  const motif = facts.lineMotifs.find((item) => item.type !== "x-ray") ?? facts.lineMotifs[0];
+  // A piece that can be taken for free is not really pinning or skewering anything.
+  if (motif && !facts.movedPieceLoose) {
     insights.push({ id: "line-motif", kind: "line-motif", priority: motif.type === "pin" || motif.type === "skewer" ? 86 : 70,
-      explanation: `${move.san} creates a ${motif.type}: the ${motif.frontPiece} on ${motif.frontSquare} stands in front of the ${motif.behindPiece} on ${motif.behindSquare}.`,
+      explanation: `${move.san} creates ${motif.type === "x-ray" ? "an x-ray" : `a ${motif.type}`}: the ${motif.frontPiece} on ${motif.frontSquare} stands in front of the ${motif.behindPiece} on ${motif.behindSquare}.`,
       lesson: `Check whether the ${motif.frontPiece} can move without exposing the piece behind it.`, evidenceIds: ["played_move", "line_motifs"] });
   }
   if (opening?.guidanceAvailable) {

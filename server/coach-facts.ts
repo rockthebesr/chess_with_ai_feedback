@@ -25,6 +25,8 @@ export interface CoachingFacts {
   newlyLoosePieces: Array<{ color: "w" | "b"; square: string; piece: string }>;
   rescuedPieces: Array<{ color: "w" | "b"; square: string; piece: string }>;
   lineMotifs: Array<{ type: "pin" | "skewer" | "x-ray"; frontSquare: string; frontPiece: string; behindSquare: string; behindPiece: string }>;
+  /** Pieces the moved piece really threatens at once: the king, undefended pieces, or pieces worth more than it. */
+  forkTargets: Array<{ square: string; piece: string }>;
   /** The moved piece can be taken by something cheaper, so a defender would not save the trade. */
   movedPieceOutranked?: { square: string; piece: string };
   /** Other pieces of the mover's that this move newly left attacked by something cheaper. */
@@ -104,6 +106,14 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
     if (earlier && pieceValues[earlier.type] < pieceValues[target.type]) return [];
     return [{ square, piece: pieceNames[target.type], attackerSquare: now.square, attacker: pieceNames[now.type] }];
   });
+  const movedPieceCapturable = movedPieceLoose || Boolean(movedPieceOutranked);
+  const forkTargets = movedPieceCapturable ? [] : movedPieceAttacks.flatMap((square) => {
+    const target = before.get(square as Square);
+    if (!target || target.color !== opponent) return [];
+    if (target.type === "k") return [{ square, piece: "king" }];
+    if (!newlyAttackedPieces.some((item) => item.square === square)) return [];
+    return pieceValues[target.type] > movedValue || !legalDefenders(before, square as Square, opponent).length ? [{ square, piece: pieceNames[target.type] }] : [];
+  });
   const lineMotifs = findLineMotifs(before, applied.to, applied.promotion ?? applied.piece, applied.color);
   const materialGain = applied.captured ? pieceValues[applied.captured] : 0;
   const materialSwing = materialBalance(afterCounts, applied.color) - materialBalance(beforeCounts, applied.color);
@@ -128,7 +138,7 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
   if (opening) facts.push({ id: "opening", text: opening.guidanceAvailable
     ? `At this move the opening was ${opening.name}${opening.current ? "" : " (the game had left the named book line)"}. The mover's verified stored plan was: ${moverColor === "w" ? opening.plansWhite : opening.plansBlack}`
     : `At this move the position book identified ${opening.name}${opening.current ? "" : " before the game left the named line"}; no opening-specific strategic plan is stored.` });
-  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, movedPieceOutranked, newlyOutranked, reply, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
+  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, forkTargets, movedPieceOutranked, newlyOutranked, reply, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
 }
 
 export function factsPacket(facts: CoachingFacts): object {
@@ -209,6 +219,7 @@ function findLineMotifs(chess: Chess, from: Square, piece: string, color: "w" | 
     : [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]];
   const file = from.charCodeAt(0) - 97; const rank = Number(from[1]) - 1;
   const result: CoachingFacts["lineMotifs"] = [];
+  const opponent = color === "w" ? "b" : "w";
   for (const [df, dr] of directions) {
     const occupied: Array<{ square: Square; piece: NonNullable<ReturnType<Chess["get"]>> }> = [];
     for (let step = 1; step < 8; step += 1) {
@@ -218,10 +229,18 @@ function findLineMotifs(chess: Chess, from: Square, piece: string, color: "w" | 
     }
     if (occupied.length < 2 || occupied[0].piece.color === color || occupied[1].piece.color === color) continue;
     const [front, behind] = occupied;
-    const type = behind.piece.type === "k" ? "pin" : front.piece.type === "k" ? "skewer" : "x-ray";
+    const type = motifType(front.piece.type, behind.piece.type, legalCapturers(chess, from, opponent).includes(front.square));
     result.push({ type, frontSquare: front.square, frontPiece: pieceNames[front.piece.type], behindSquare: behind.square, behindPiece: pieceNames[behind.piece.type] });
   }
   return result;
+}
+
+function motifType(front: string, behind: string, frontCanCaptureAttacker: boolean): CoachingFacts["lineMotifs"][number]["type"] {
+  // A piece that can simply take the attacker is not pinned or skewered.
+  if (frontCanCaptureAttacker) return "x-ray";
+  if (behind === "k" || (front !== "k" && pieceValues[behind] > pieceValues[front])) return "pin";
+  if (front === "k" || (pieceValues[front] > pieceValues[behind] && behind !== "p")) return "skewer";
+  return "x-ray";
 }
 
 export function attacksForPiece(chess: Chess, square: Square, piece: string, color: "w" | "b"): string[] {

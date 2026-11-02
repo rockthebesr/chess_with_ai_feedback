@@ -154,6 +154,47 @@ describe("verified coaching insights", () => {
     });
   });
 
+  describe("real forks and pins", () => {
+    const facts = (fen: string, from: string, to: string) => buildCoachingFacts(playedMove(fen, from, to), analysis());
+    const hasFork = (fen: string, from: string, to: string) => {
+      const move = playedMove(fen, from, to);
+      return buildVerifiedInsights(move, analysis(), buildCoachingFacts(move, analysis()), undefined, false).some((item) => item.id === "piece-fork");
+    };
+
+    it("does not call attacking two defended pawns a fork", () => {
+      expect(hasFork("4k3/1p3p2/2p1p3/8/8/8/8/3QK3 w - - 0 1", "d1", "d7")).toBe(false);
+    });
+
+    it("counts the king, undefended pieces, and pieces worth more than the attacker", () => {
+      expect(hasFork("8/4k3/8/8/3N4/8/1r6/4K3 w - - 0 1", "d4", "c6")).toBe(false);
+      expect(facts("r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5", "c7").forkTargets).toEqual(expect.arrayContaining([{ square: "e8", piece: "king" }, { square: "a8", piece: "rook" }]));
+      expect(hasFork("r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5", "c7")).toBe(true);
+    });
+
+    it("does not call it a fork when the forking piece can be taken", () => {
+      expect(hasFork("4k3/1r2p3/8/1N6/8/8/8/4K3 w - - 0 1", "b5", "d6")).toBe(false);
+    });
+
+    it("recognizes a pin against a queen as well as a king", () => {
+      expect(facts("q3k3/1n6/8/8/8/8/6B1/4K3 w - - 0 1", "g2", "d5").lineMotifs).toContainEqual({ type: "pin", frontSquare: "b7", frontPiece: "knight", behindSquare: "a8", behindPiece: "queen" });
+    });
+
+    it("recognizes a skewer through a more valuable piece", () => {
+      expect(facts("n7/1r2k3/8/8/8/8/6B1/4K3 w - - 0 1", "g2", "d5").lineMotifs).toContainEqual({ type: "skewer", frontSquare: "b7", frontPiece: "rook", behindSquare: "a8", behindPiece: "knight" });
+    });
+
+    it("does not call it a pin when the front piece can take the attacker", () => {
+      const motifs = facts("4r1k1/8/8/8/8/8/8/1Q2K3 w - - 0 1", "b1", "e4").lineMotifs;
+      expect(motifs.filter((item) => item.type === "pin")).toEqual([]);
+    });
+
+    it("words an x-ray correctly", () => {
+      const move = playedMove("6k1/p7/1p6/8/8/8/8/4K1B1 w - - 0 1", "g1", "e3");
+      const insight = buildVerifiedInsights(move, analysis(), buildCoachingFacts(move, analysis()), undefined, false).find((item) => item.id === "line-motif");
+      expect(insight?.explanation).toContain("an x-ray");
+    });
+  });
+
   it("accepts only a supplied insight and verified verdict", () => {
     const move = playedMove(new Chess().fen(), "e2", "e4");
     const result = analysis();
