@@ -12,6 +12,7 @@ import { api } from "./api";
 import { BestMovePanel } from "./BestMovePanel";
 import { ChessBoard } from "./ChessBoard";
 import { moveLabel } from "./GameReview";
+import { materialFromFen, materialSummary } from "./material";
 import { MoveCard } from "./MoveCard";
 import { Postgame } from "./Postgame";
 import { PracticePanel, type PracticeState } from "./Practice";
@@ -103,6 +104,11 @@ export function GameRoom({
   };
   // The answer only applies to the position it was asked about, so it disappears as soon as the board changes.
   const shownFen = review?.fen ?? game.fen;
+  const material = materialFromFen(practice?.fen ?? shownFen);
+  const playerMaterial = (color: "white" | "black") => ({
+    captured: material.capturedBy[color],
+    lead: color === "white" ? material.whiteLead : -material.whiteLead,
+  });
   const shownAdvice = advice?.fen === shownFen ? advice : undefined;
   const bestMoveAvailable =
     stockfish &&
@@ -266,6 +272,7 @@ export function GameRoom({
             name={orientation === "white" ? game.settings.blackName : game.settings.whiteName}
             color={orientation === "white" ? "black" : "white"}
             active={game.turn === (orientation === "white" ? "black" : "white") && game.status === "active"}
+            {...playerMaterial(orientation === "white" ? "black" : "white")}
           />
           {practice ? (
             <ChessBoard
@@ -296,6 +303,7 @@ export function GameRoom({
             name={orientation === "white" ? game.settings.whiteName : game.settings.blackName}
             color={orientation}
             active={game.turn === orientation && game.status === "active"}
+            {...playerMaterial(orientation)}
           />
           {review && (
             <div className="review-banner">
@@ -383,6 +391,13 @@ export function GameRoom({
         </section>
         <aside className="coach-column">
           {shownAdvice && !practice && <BestMovePanel advice={shownAdvice} onClose={() => setAdvice(undefined)} />}
+          <p className="material-summary">
+            {materialSummary(
+              material.whiteLead,
+              { white: game.settings.whiteName, black: game.settings.blackName },
+              game.settings.mode === "bot" ? game.settings.humanColor : undefined,
+            )}
+          </p>
           <section className="turn-card">
             <div>
               <span className="eyebrow">{game.status === "active" ? "Current turn" : "Game over"}</span>
@@ -508,11 +523,32 @@ function reviewFromLine(fen: string, line?: CandidateLine) {
   };
 }
 
-function Player({ name, color, active }: { name: string; color: "white" | "black"; active: boolean }) {
+const CAPTURED_GLYPHS: Record<string, string> = { q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
+
+function Player({
+  name,
+  color,
+  active,
+  captured,
+  lead,
+}: {
+  name: string;
+  color: "white" | "black";
+  active: boolean;
+  captured: string[];
+  lead: number;
+}) {
   return (
     <div className={`player ${active ? "active" : ""}`}>
       <span className={`avatar ${color}`}>{name[0]?.toUpperCase() || "?"}</span>
       <strong>{name}</strong>
+      <span
+        className={`captured took-${color}`}
+        title={`${name} has captured ${captured.length} ${captured.length === 1 ? "piece" : "pieces"}`}
+      >
+        {captured.map((piece) => CAPTURED_GLYPHS[piece]).join("")}
+        {lead > 0 && <b>+{lead}</b>}
+      </span>
       {active && <small>thinking</small>}
     </div>
   );

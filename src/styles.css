@@ -150,6 +150,9 @@ input:focus, select:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px 
 .best-move-card { background: #e9f1f8; border: 1px solid #c3d8ea; border-radius: 14px; padding: 15px 17px; font-size: .9rem; }.best-move-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }.best-move-card header strong { font-family: Georgia, serif; font-size: 1.25rem; }.best-move-card header button { border: 0; background: transparent; color: var(--muted); font-size: .76rem; }
 .best-move-card ul { margin: 8px 0; padding-left: 19px; }.best-move-card li + li { margin-top: 3px; }.best-move-card p { margin: 6px 0 0; color: #3f4942; font-size: .84rem; }
 
+.captured { font-size: 1.05rem; line-height: 1; letter-spacing: -.12em; color: #17231d; }.captured.took-black { color: #fff; -webkit-text-stroke: .6px #17231d; }.captured b { margin-left: 8px; font-size: .82rem; letter-spacing: 0; color: var(--green-2); -webkit-text-stroke: 0; }
+.material-summary { order: -1; margin: 0; padding: 8px 12px; border-radius: 8px; background: #e6e9e2; font-size: .85rem; font-weight: 600; }
+
 @media (max-width: 950px) { .play-layout { grid-template-columns: minmax(0, 680px); }.coach-column { max-height: none; overflow: visible; }.home-grid { grid-template-columns: 1fr; }.side-stack { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 951px) {
   .play-layout { height: calc(100dvh - 66px); padding-block: clamp(12px, 2vh, 30px); overflow: hidden; }
