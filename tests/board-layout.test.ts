@@ -15,7 +15,7 @@ describe("board layout", () => {
   });
 
   it("renders accepted server coaching without a browser-side rewrite", () => {
-    const source = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../src/MoveCard.tsx", import.meta.url), "utf8");
     expect(source).not.toContain("friendlyCoachCopy");
     expect(source).not.toContain("partialExplanation");
     expect(source).toContain("Coaching point");

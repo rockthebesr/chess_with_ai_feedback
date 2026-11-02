@@ -61,7 +61,7 @@ Codex must use managed ChatGPT auth. API-key auth is deliberately refused so the
 
 ## Testing notes
 
-Tests use fake providers and a temporary `Storage(dir)`, so they don't need Stockfish, Ollama, or Codex. `tests/board-layout.test.ts` asserts on literal strings in `src/styles.css` and `src/App.tsx`, so editing those files can break it.
+Tests use fake providers and a temporary `Storage(dir)`, so they don't need Stockfish, Ollama, or Codex. `tests/board-layout.test.ts` asserts on literal strings in `src/styles.css` and `src/MoveCard.tsx`, so editing those files can break it.
 
 ## Other docs
 
