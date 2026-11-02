@@ -55,7 +55,7 @@ When hints are hidden (`hintsVisible: false`), coaching must not reveal a live n
 
 ### Providers and fallbacks
 
-Everything implements `CoachProvider`. `PreferredCoachProvider` (`local-coach.ts`) tries Ollama first, then fails over to `CodexCoachProvider` (`codex app-server` over stdio) with one final attempt. A failed request only moves later requests to the cloud if the Ollama health check also fails. `refresh()` runs before each coaching job and rechecks at most every 30 seconds, returning to local once it recovers. If coaching fails or is unavailable, `fallbackCoaching` produces deterministic text. Without Stockfish, `fallbackAnalysis` gives a material-only result with the verdict "Analysis uncertain".
+Everything implements `CoachProvider`. `PreferredCoachProvider` (`local-coach.ts`) tries Ollama first, then fails over to `CodexCoachProvider` (`codex app-server` over stdio) with one final attempt. A failed request only moves later requests to the cloud if the Ollama health check also fails. `refresh()` runs before each coaching job and rechecks at most every 30 seconds, returning to local once it recovers. Ollama requests time out after 60 seconds and count as failures, not cancellations. If coaching fails or is unavailable, `fallbackCoaching` produces deterministic text. Without Stockfish, `fallbackAnalysis` gives a material-only result with the verdict "Analysis uncertain".
 
 Codex must use managed ChatGPT auth. API-key auth is deliberately refused so the app can't create API charges; don't add API-key paths. Don't forward Codex stderr or credentials to the browser.
 
