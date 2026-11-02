@@ -1,4 +1,5 @@
 import type {
+  BestMoveAdvice,
   GameReviewSummary,
   GameSettings,
   GameState,
@@ -41,6 +42,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ moveId, question }),
     }),
+  bestMove: (id: string, fen?: string) =>
+    request<BestMoveAdvice>(`/api/games/${id}/best-move`, { method: "POST", body: JSON.stringify({ fen }) }),
   patterns: () => request<PlayerPatterns[]>("/api/patterns"),
   practice: (id: string) => request<PracticePosition[]>(`/api/games/${id}/practice`),
   practiceAttempt: (id: string, moveId: string, attempt: { from: string; to: string; promotion?: string }) =>

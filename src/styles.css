@@ -69,6 +69,7 @@ input:focus, select:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px 
 .square { position: relative; min-width: 0; min-height: 0; overflow: hidden; border: 0; padding: 0; display: grid; place-items: center; font-size: clamp(2.3rem, 6.2vw, 5rem); line-height: 1; }
 .square.light { background: var(--board-light); }
 .square.dark { background: var(--board-dark); }
+.square.hint { box-shadow: inset 0 0 0 100px rgba(58,132,201,.5); }
 .square.last { box-shadow: inset 0 0 0 100px rgba(226,183,67,.34); }
 .square.selected { box-shadow: inset 0 0 0 4px #e8b741, inset 0 0 0 100px rgba(232,183,65,.17); }
 .square.destination::after { content: ""; width: 24%; aspect-ratio: 1; border-radius: 50%; background: rgba(30,62,46,.35); position: absolute; }
@@ -144,6 +145,10 @@ input:focus, select:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px 
 .patterns h3 { margin-top: 0; }.pattern-player { display: grid; gap: 3px; }.pattern-player + .pattern-player { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }.pattern-player small { color: var(--muted); }
 .pattern-player ul { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; font-size: .82rem; }.pattern-player li { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; }.pattern-player li i { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: #72927e; }
 .pattern-advice { margin: 0; font-size: .82rem; color: #3f4942; border-left: 3px solid var(--gold); padding-left: 9px; }
+
+.controls .best-move-button { background: #244d3b; border-color: #244d3b; color: #fff; }.controls .best-move-button:disabled { opacity: .55; }
+.best-move-card { background: #e9f1f8; border: 1px solid #c3d8ea; border-radius: 14px; padding: 15px 17px; font-size: .9rem; }.best-move-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }.best-move-card header strong { font-family: Georgia, serif; font-size: 1.25rem; }.best-move-card header button { border: 0; background: transparent; color: var(--muted); font-size: .76rem; }
+.best-move-card ul { margin: 8px 0; padding-left: 19px; }.best-move-card li + li { margin-top: 3px; }.best-move-card p { margin: 6px 0 0; color: #3f4942; font-size: .84rem; }
 
 @media (max-width: 950px) { .play-layout { grid-template-columns: minmax(0, 680px); }.coach-column { max-height: none; overflow: visible; }.home-grid { grid-template-columns: 1fr; }.side-stack { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 951px) {

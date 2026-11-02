@@ -1,7 +1,15 @@
 import { Chess } from "chess.js";
 import { useEffect, useState } from "react";
-import type { CandidateLine, GameReviewSummary, GameSettings, GameState, ProviderStatus } from "../shared/types";
+import type {
+  BestMoveAdvice,
+  CandidateLine,
+  GameReviewSummary,
+  GameSettings,
+  GameState,
+  ProviderStatus,
+} from "../shared/types";
 import { api } from "./api";
+import { BestMovePanel } from "./BestMovePanel";
 import { ChessBoard } from "./ChessBoard";
 import { moveLabel } from "./GameReview";
 import { MoveCard } from "./MoveCard";
@@ -54,6 +62,8 @@ export function GameRoom({
   const [summaryFailed, setSummaryFailed] = useState(false);
   const [summaryAttempt, setSummaryAttempt] = useState(0);
   const [practice, setPractice] = useState<PracticeState>();
+  const [advice, setAdvice] = useState<BestMoveAdvice>();
+  const [askingBestMove, setAskingBestMove] = useState(false);
   const [boardTheme, setBoardTheme] = useState(() => appearanceFor(game).boardTheme);
   const [pieceStyle, setPieceStyle] = useState(() => appearanceFor(game).pieceStyle);
   const orientation = practice ? practice.positions[practice.index].mover : manualOrientation;
@@ -89,6 +99,26 @@ export function GameRoom({
       });
     } catch {
       /* board already limits moves */
+    }
+  };
+  // The answer only applies to the position it was asked about, so it disappears as soon as the board changes.
+  const shownFen = review?.fen ?? game.fen;
+  const shownAdvice = advice?.fen === shownFen ? advice : undefined;
+  const bestMoveAvailable =
+    stockfish &&
+    !practice &&
+    (review
+      ? legalFor(new Chess(review.fen)).length > 0
+      : game.status === "active" && !(game.settings.mode === "bot" && game.turn !== game.settings.humanColor));
+  const askBestMove = async () => {
+    setError(undefined);
+    setAskingBestMove(true);
+    try {
+      setAdvice(await api.bestMove(game.id, review?.fen));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The best move could not be found.");
+    } finally {
+      setAskingBestMove(false);
     }
   };
   const startPractice = async () => {
@@ -252,6 +282,7 @@ export function GameRoom({
               fen={review?.fen ?? game.fen}
               orientation={orientation}
               legalMoves={review?.legalMoves ?? game.legalMoves}
+              hint={shownAdvice}
               lastMove={
                 review ? review.lastMove : last ? { from: last.uci.slice(0, 2), to: last.uci.slice(2, 4) } : undefined
               }
@@ -275,6 +306,14 @@ export function GameRoom({
             </div>
           )}
           <div className="controls">
+            <button
+              className="best-move-button"
+              onClick={() => void askBestMove()}
+              disabled={!bestMoveAvailable || askingBestMove}
+              title={stockfish ? undefined : "Install Stockfish to see the best move."}
+            >
+              {askingBestMove ? "Thinking…" : "★ Best move & why"}
+            </button>
             <button onClick={() => setManualOrientation((value) => (value === "white" ? "black" : "white"))}>
               ↻ Flip
             </button>
@@ -343,6 +382,7 @@ export function GameRoom({
           </div>
         </section>
         <aside className="coach-column">
+          {shownAdvice && !practice && <BestMovePanel advice={shownAdvice} onClose={() => setAdvice(undefined)} />}
           <section className="turn-card">
             <div>
               <span className="eyebrow">{game.status === "active" ? "Current turn" : "Game over"}</span>

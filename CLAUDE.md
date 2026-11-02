@@ -51,7 +51,7 @@ The most important invariant: **a language model never writes chess prose shown 
 
 The browser shows that text verbatim. To add coaching content, add a fact and insight on the server rather than widening the model's output. Invalid selections are retried up to 3 times by `runWithCoachRetries`; infrastructure errors fail immediately.
 
-When hints are hidden (`hintsVisible: false`), coaching must not reveal a live next move.
+When hints are hidden (`hintsVisible: false`), coaching must not reveal a live next move; once the game is over it may. The "Best move & why" button (`best-move.ts`) is the one exception, because the player asked. Its text is also written by the server, never by a model.
 
 ### Providers and fallbacks
 

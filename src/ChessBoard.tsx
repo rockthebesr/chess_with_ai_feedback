@@ -24,6 +24,7 @@ interface Props {
   orientation: "white" | "black";
   legalMoves: Array<{ from: string; to: string; promotion?: string }>;
   lastMove?: { from: string; to: string };
+  hint?: { from: string; to: string };
   disabled?: boolean;
   theme?: BoardTheme;
   pieceStyle?: PieceStyle;
@@ -35,6 +36,7 @@ export function ChessBoard({
   orientation,
   legalMoves,
   lastMove,
+  hint,
   disabled,
   theme = "forest",
   pieceStyle = "classic",
@@ -124,6 +126,7 @@ export function ChessBoard({
               selected === square ? "selected" : "",
               destinations.has(square) ? "destination" : "",
               lastMove && (lastMove.from === square || lastMove.to === square) ? "last" : "",
+              hint && (hint.from === square || hint.to === square) ? "hint" : "",
               checkedKing === square ? "check" : "",
             ]
               .filter(Boolean)

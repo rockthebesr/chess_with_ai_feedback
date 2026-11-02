@@ -152,6 +152,10 @@ const server = createServer(async (req, res) => {
           .parse(await body(req));
         return json(res, 200, games.review(gameId, input.throughPly, input.moves));
       }
+      if (req.method === "POST" && parts[3] === "best-move") {
+        const input = z.object({ fen: z.string().max(100).optional() }).parse(await body(req));
+        return json(res, 200, await games.bestMove(gameId, input.fen));
+      }
       if (req.method === "GET" && parts[3] === "practice" && parts.length === 4)
         return json(res, 200, games.practicePositions(gameId));
       if (req.method === "POST" && parts[3] === "practice" && parts[4]) {

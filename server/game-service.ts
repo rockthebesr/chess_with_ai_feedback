@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Chess, type Move } from "chess.js";
 import type {
   AnalysisRecord,
+  BestMoveAdvice,
   CoachingRecord,
   GameReviewSummary,
   GameSettings,
@@ -16,6 +17,7 @@ import type {
   ServerEvent,
 } from "../shared/types.js";
 import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
+import { findBestMove } from "./best-move.js";
 import { fallbackCoaching, type CoachProvider } from "./coach.js";
 import { mayNameMoves } from "./coach-insights.js";
 import { recognizeOpening } from "./openings.js";
@@ -592,6 +594,25 @@ export class GameService {
       this.classifiedMistakes.set(key, pattern);
       return pattern;
     });
+  }
+
+  /** Answers an explicit request, so unlike coaching cards it may name a live move even with hints off. */
+  async bestMove(id: string, fen?: string): Promise<BestMoveAdvice> {
+    const game = this.requireGame(id);
+    if (!this.analysisEngine) throw new ServiceError(503, "Install Stockfish to see the best move.");
+    if (!fen && game.settings.mode === "bot" && game.status === "active" && game.turn === botColor(game))
+      throw new ServiceError(409, "It is the bot's turn.");
+    const position = fen ?? game.fen;
+    let board: Chess;
+    try {
+      board = new Chess(position);
+    } catch {
+      throw new ServiceError(400, "That position is not valid.");
+    }
+    if (board.isGameOver()) throw new ServiceError(409, "This position has no moves left to play.");
+    const advice = await findBestMove(this.analysisEngine, position).catch(() => undefined);
+    if (!advice) throw new ServiceError(503, "The engine could not find a move. Try again.");
+    return advice;
   }
 
   practicePositions(id: string): PracticePosition[] {

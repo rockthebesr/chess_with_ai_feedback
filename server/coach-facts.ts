@@ -283,7 +283,7 @@ export function factsPacket(facts: CoachingFacts): object {
  * Replays an engine line on the board. A line can stop mid-exchange, so a material change only counts if it
  * holds both at the last quiet move and at the end of the line.
  */
-function replayLine(
+export function replayLine(
   fen: string,
   line: string[],
   perspective: "w" | "b",

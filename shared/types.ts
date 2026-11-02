@@ -165,6 +165,18 @@ export interface PlayerPatterns {
   patterns: Array<{ id: MistakePattern; label: string; advice: string; count: number; share: number }>;
 }
 
+/** The engine's best move in a position, with an explanation written by the server. */
+export interface BestMoveAdvice {
+  fen: string;
+  san: string;
+  from: string;
+  to: string;
+  reasons: string[];
+  evaluation: string;
+  line: string[];
+  comparison?: string;
+}
+
 export interface ProviderStatus {
   available: boolean;
   authMode?: string;
