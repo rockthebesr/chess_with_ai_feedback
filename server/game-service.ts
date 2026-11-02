@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Chess } from "chess.js";
 import type {
-  AnalysisRecord, CoachingRecord, GameSettings, GameState, GameSummary, MoveRecord,
+  AnalysisRecord, CoachingRecord, GameReviewSummary, GameSettings, GameState, GameSummary, MoveRecord,
   ProviderStatus, ServerEvent,
 } from "../shared/types.js";
 import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
@@ -9,7 +9,7 @@ import { fallbackCoaching, type CoachProvider } from "./coach.js";
 import { recognizeOpening } from "./openings.js";
 import { Storage } from "./storage.js";
 import type { UciEngine } from "./uci.js";
-import { winChanceLoss } from "./verdict.js";
+import { moveAccuracy, winChance, winChanceLoss } from "./verdict.js";
 
 const defaultSettings: GameSettings = {
   mode: "bot", whiteName: "Rock", blackName: "Coach Bot", humanColor: "white",
@@ -389,18 +389,31 @@ export class GameService {
     return { fen: chess.fen(), sans, legalMoves: legalMoves(chess) };
   }
 
-  postgameSummary(id: string): { keyMoments: string[]; lessons: string[]; missing: number } {
+  postgameSummary(id: string): GameReviewSummary {
     const game = this.requireGame(id);
     const completed = game.moves.map((move) => ({ move, analysis: game.analysis[move.id] })).filter((item) => item.analysis?.status === "complete");
     const keyMoments = completed
       .filter((item) => item.analysis.verdict !== "Good move")
       .sort((a, b) => moveWinChanceLoss(b) - moveWinChanceLoss(a))
       .slice(0, 3)
-      .map((item) => `${item.move.ply}. ${item.move.san}: ${item.analysis.verdict === "Blunder" ? "This move badly damaged the position" : item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`);
+      .map((item) => `${Math.ceil(item.move.ply / 2)}${item.move.mover === "black" ? "…" : "."} ${item.move.san}: ${item.analysis.verdict === "Blunder" ? "This move badly damaged the position" : item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`);
     const lessons = keyMoments.length
       ? ["At each critical turn, scan checks, captures, and threats before choosing a move.", "Review the alternatives on a separate board; the recorded game will not change."]
       : ["Development and king safety were the main practical themes."];
-    return { keyMoments: keyMoments.length ? keyMoments : ["No major engine swing was recorded."], lessons, missing: game.moves.length - completed.length };
+    const averageAccuracy = (mover: "white" | "black") => {
+      const moves = completed.filter((item) => item.move.mover === mover);
+      if (!moves.length) return undefined;
+      return Math.round(moves.reduce((total, item) => total + moveAccuracy(moveWinChanceLoss(item)), 0) / moves.length * 10) / 10;
+    };
+    const evaluation = completed.flatMap(({ move, analysis }) => {
+      const moverChance = winChance({ cp: analysis.afterCp, mate: analysis.afterMate }, move.mover);
+      if (moverChance === undefined) return [];
+      return [{ ply: move.ply, whiteWinChance: Math.round((move.mover === "white" ? moverChance : 100 - moverChance) * 10) / 10 }];
+    });
+    return {
+      keyMoments: keyMoments.length ? keyMoments : ["No major engine swing was recorded."], lessons, missing: game.moves.length - completed.length,
+      accuracy: { white: averageAccuracy("white"), black: averageAccuracy("black") }, evaluation,
+    };
   }
 
   private isCurrentMove(game: GameState, move: MoveRecord): boolean {

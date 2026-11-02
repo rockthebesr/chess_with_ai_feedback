@@ -1,4 +1,4 @@
-import type { GameSettings, GameState, GameSummary, ProviderStatus, ServerEvent } from "../shared/types";
+import type { GameReviewSummary, GameSettings, GameState, GameSummary, ProviderStatus, ServerEvent } from "../shared/types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -26,7 +26,7 @@ export const api = {
     request<GameState>(`/api/games/${id}/resign`, { method: "POST", body: JSON.stringify({ color }) }),
   ask: (id: string, moveId: string, question: string) =>
     request<{ answer: string }>(`/api/games/${id}/questions`, { method: "POST", body: JSON.stringify({ moveId, question }) }),
-  summary: (id: string) => request<{ keyMoments: string[]; lessons: string[]; missing: number }>(`/api/games/${id}/summary`),
+  summary: (id: string) => request<GameReviewSummary>(`/api/games/${id}/summary`),
 };
 
 export function connectEvents(onEvent: (event: ServerEvent) => void): () => void {

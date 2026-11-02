@@ -37,6 +37,11 @@ export function winChanceLoss(before: Score, after: Score, mover: "white" | "bla
   return start === undefined || end === undefined ? undefined : Math.max(0, start - end);
 }
 
+/** Lichess's per-move accuracy curve: 100 for no win chance lost, falling quickly as the loss grows. */
+export function moveAccuracy(lostWinChance: number): number {
+  return Math.min(100, Math.max(0, 103.1668 * Math.exp(-0.04354 * lostWinChance) - 3.1669));
+}
+
 export function verdictFor(before: Score, after: Score, mover: "white" | "black", forcedMove = false): { verdict: Verdict; lossCp?: number; note?: string } {
   if (forcedMove) return { verdict: "Good move", lossCp: moverLoss(before, after, mover), note: "This was the only legal move." };
   if (before.mate !== undefined || after.mate !== undefined) return mateVerdict(before, after, mover);

@@ -204,6 +204,38 @@ describe("authoritative game service", () => {
     storage.close();
   });
 
+  it("reports accuracy and evaluation per color from the stored scores", async () => {
+    const scores: Record<string, number> = {};
+    const engine = { version: "fake", analyze: async (fen: string) => ({ bestMove: "e2e4", lines: [{ multipv: 1, depth: 10, cp: scores[fen] ?? 0, moves: [] }] }) } as unknown as UciEngine;
+    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+    const storage = new Storage(dir);
+    const coach: CoachProvider = { status: () => ({ available: false }), initialize: async () => ({ available: false }), coach: async () => { throw new Error("offline"); }, followUp: async () => { throw new Error("offline"); }, cancel: async () => undefined, close: () => undefined };
+    const service = new GameService(storage, coach, engine, undefined, () => undefined);
+    const game = service.create({ mode: "local" });
+    const first = await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+    await service.idle();
+    // Black then blunders: after e5, White (to move) sees +900.
+    scores["rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"] = 900;
+    await service.move(game.id, { from: "e7", to: "e5", expectedRevision: first.revision });
+    await service.idle();
+    const summary = service.postgameSummary(game.id);
+    expect(summary.accuracy.white).toBe(100);
+    expect(summary.accuracy.black).toBeLessThan(20);
+    expect(summary.evaluation.map((point) => point.ply)).toEqual([1, 2]);
+    expect(summary.evaluation[0].whiteWinChance).toBe(50);
+    expect(summary.evaluation[1].whiteWinChance).toBeGreaterThan(90);
+    storage.close();
+  });
+
+  it("leaves accuracy empty when no move has engine analysis", async () => {
+    const { service, storage } = setup();
+    const game = service.create({ mode: "local" });
+    await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
+    await service.idle();
+    expect(service.postgameSummary(game.id)).toMatchObject({ accuracy: {}, evaluation: [], missing: 1 });
+    storage.close();
+  });
+
   describe("post-game verdict recheck", () => {
     // Scores keyed by search budget, so the longer pass can disagree with the live one.
     function recheckSetup(scoreFor: (fen: string, ms: number) => number) {

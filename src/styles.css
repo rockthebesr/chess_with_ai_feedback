@@ -126,6 +126,15 @@ input:focus, select:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px 
 .followup { margin: 0 15px 12px; padding: 10px; background: #eef3ef; border-radius: 8px; font-size: .8rem; }.followup p { margin: 5px 0 0; }.mini-error { color: #9a4434; font-size: .76rem; margin: 0 15px 10px; }.offline-note { display: block; color: #8a6d38; padding: 0 15px 10px; }
 .postgame { padding: 17px; background: #edf4ee; border-color: #cdded1; }.postgame h2 { margin: 0; }.postgame h3 { font-size: .85rem; margin-bottom: 4px; }.postgame ul { padding-left: 20px; margin-top: 5px; font-size: .84rem; color: #4e5b52; }.postgame a { color: var(--green); font-weight: 700; }.postgame button { margin-top: 8px; }
 
+.game-review { display: grid; gap: 10px; margin: 12px 0; }
+.accuracy { display: flex; align-items: baseline; gap: 16px; margin: 0; font-size: .82rem; }.accuracy b { font-size: 1.15rem; font-family: Georgia, serif; }.accuracy small { margin-left: auto; color: var(--muted); }
+.eval-graph { width: 100%; height: 72px; display: block; background: #4a4f4b; border-radius: 8px; }
+.eval-area { fill: #f4f2ea; }.eval-mid { stroke: #a39f92; stroke-width: .2; }.eval-line { fill: none; stroke: #2f7d57; stroke-width: 1.5; }.eval-marker { stroke: #d39b22; stroke-width: 2; }.eval-hit { fill: transparent; cursor: pointer; }.eval-hit:hover { fill: rgba(211, 155, 34, .25); }
+.review-moves { display: flex; flex-wrap: wrap; gap: 4px; max-height: 150px; overflow-y: auto; }
+.postgame .review-move { padding: 3px 6px; font-size: .74rem; border-radius: 5px; }
+.postgame .review-move.inaccuracy { background: #f5e8c7; color: #87681f; }.postgame .review-move.mistake { background: #f6ded8; color: #a44232; }.postgame .review-move.blunder { background: #a44232; color: #fff; }.postgame .review-move.current { outline: 2px solid var(--gold); outline-offset: 1px; }
+.review-hint { color: var(--muted); font-size: .72rem; }
+
 @media (max-width: 950px) { .play-layout { grid-template-columns: minmax(0, 680px); }.coach-column { max-height: none; overflow: visible; }.home-grid { grid-template-columns: 1fr; }.side-stack { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 951px) {
   .play-layout { height: calc(100dvh - 66px); padding-block: clamp(12px, 2vh, 30px); overflow: hidden; }

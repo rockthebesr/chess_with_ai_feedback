@@ -122,6 +122,15 @@ export interface GameSummary {
   updatedAt: string;
 }
 
+export interface GameReviewSummary {
+  keyMoments: string[];
+  lessons: string[];
+  missing: number;
+  /** Average per-move accuracy, 0 to 100, for each color with analyzed moves. */
+  accuracy: { white?: number; black?: number };
+  evaluation: Array<{ ply: number; whiteWinChance: number }>;
+}
+
 export interface ProviderStatus {
   available: boolean;
   authMode?: string;
