@@ -16,6 +16,7 @@ export type InsightKind =
   | "opening"
   | "engine-alternative"
   | "opponent-reply"
+  | "no-single-tactic"
   | "piece-scope";
 
 export interface VerifiedInsight {
@@ -32,6 +33,13 @@ export interface CoachSelection {
   verdict: Verdict;
   insightId: string;
 }
+
+const EXPLAINS_A_BAD_MOVE = new Set<InsightKind>([
+  "loose-piece",
+  "outranked-piece",
+  "opponent-reply",
+  "engine-alternative",
+]);
 
 const values: Record<string, number> = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
 
@@ -197,13 +205,31 @@ export function buildVerifiedInsights(
       id: "engine-alternative",
       kind: "engine-alternative",
       priority: 90,
-      explanation: `${move.san} received a ${analysis.verdict.toLowerCase()} verdict; the verified alternative was ${analysis.alternatives[0].san[0]}.`,
+      explanation: `The engine preferred ${analysis.alternatives[0].san[0]} to ${move.san} here.`,
       lesson: `Use the review board to compare ${move.san} with ${analysis.alternatives[0].san[0]} and identify the first different threat.`,
       evidenceIds: ["played_move", "engine_verdict", "best_alternative"],
     });
   if (unfavorable) {
     const reply = opponentReplyInsight(move, analysis, facts, hintsVisible);
     if (reply) insights.push(reply);
+  }
+  if (unfavorable) {
+    // A marked-down move needs a reason, so describing what it did, or praising it, doesn't belong on the card.
+    const costlyCapture =
+      (values[facts.movingPiece] ?? 0) > (values[facts.capturedPiece ?? ""] ?? 0) || facts.movedPieceLoose;
+    const reasons = insights.filter(
+      (item) => EXPLAINS_A_BAD_MOVE.has(item.kind) || (item.kind === "capture" && costlyCapture),
+    );
+    if (!reasons.length)
+      reasons.push({
+        id: "no-single-tactic",
+        kind: "no-single-tactic",
+        priority: 20,
+        explanation: `The engine preferred another plan to ${move.san} here, and there's no single tactic behind it.`,
+        lesson: "Use game review afterwards to compare this move with the engine's choice.",
+        evidenceIds: ["played_move", "engine_verdict"],
+      });
+    return reasons.sort((a, b) => b.priority - a.priority);
   }
   insights.push({
     id: "piece-scope",

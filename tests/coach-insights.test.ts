@@ -110,6 +110,55 @@ describe("verified coaching insights", () => {
     ).toBe(true);
   });
 
+  describe("explaining a marked-down move", () => {
+    // Bb2 from the reported game: it attacks e5 and develops the bishop, but neither is why it was marked down.
+    const fen = "2rq1rk1/1p1n1ppp/2p5/2bnpN2/p7/1P1P2P1/P1P2PBP/R1B1QRK1 w - - 1 16";
+    const insightsFor = (verdict: AnalysisRecord["verdict"], hintsVisible: boolean) => {
+      const move = playedMove(fen, "c1", "b2");
+      const result: AnalysisRecord = {
+        ...analysis(verdict),
+        alternatives: [{ id: "v1", uci: ["g2f3"], san: ["Bf3"] }],
+      };
+      return buildVerifiedInsights(move, result, buildCoachingFacts(move, result), undefined, hintsVisible);
+    };
+
+    it("says so honestly when no reason can be verified", () => {
+      const [only, ...rest] = insightsFor("Inaccuracy", false);
+      expect(rest).toEqual([]);
+      expect(only.id).toBe("no-single-tactic");
+      expect(only.explanation).toBe(
+        "The engine preferred another plan to Bb2 here, and there's no single tactic behind it.",
+      );
+      expect(only.explanation).not.toContain("Bf3");
+    });
+
+    it("names the engine's choice only when hints are visible", () => {
+      expect(insightsFor("Mistake", true).map((item) => item.explanation)).toEqual([
+        "The engine preferred Bf3 to Bb2 here.",
+      ]);
+    });
+
+    it("never offers narration or praise for a bad move", () => {
+      for (const verdict of ["Inaccuracy", "Mistake", "Blunder"] as const) {
+        const kinds = insightsFor(verdict, true).map((item) => item.kind);
+        expect(kinds).not.toEqual(expect.arrayContaining(["new-attack"]));
+        expect(kinds).not.toEqual(expect.arrayContaining(["development"]));
+        expect(kinds).not.toEqual(expect.arrayContaining(["piece-scope"]));
+      }
+    });
+
+    it("keeps describing good moves", () => {
+      expect(insightsFor("Good move", false).map((item) => item.id)).toEqual(
+        expect.arrayContaining(["new-piece-attack", "developed-piece", "piece-scope"]),
+      );
+    });
+
+    it("falls back to the same honest text when coaching is offline", () => {
+      const move = playedMove(fen, "c1", "b2");
+      expect(fallbackCoaching(move, analysis("Inaccuracy")).explanation).toContain("no single tactic");
+    });
+  });
+
   describe("attacks by cheaper pieces", () => {
     const insightsFor = (fen: string, from: string, to: string, verdict: AnalysisRecord["verdict"] = "Blunder") => {
       const move = playedMove(fen, from, to);
