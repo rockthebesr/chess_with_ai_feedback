@@ -26,12 +26,14 @@ export async function analyzeMove(engine: UciEngine | undefined, move: MoveRecor
   try {
     // Bot play uses a different UCI process; this analysis worker can spend its full budget.
     const beforeRaw = await engine.analyze(move.beforeFen, budgetMs, 3);
-    const afterRaw = await engine.analyze(move.afterFen, budgetMs, 1);
+    // The engine reports no line for a finished game, so these results come from the rules instead.
+    const position = new Chess(move.afterFen);
+    const finished = position.isCheckmate() ? { mate: 0 } : position.isStalemate() ? { cp: 0 } : undefined;
+    const afterLine = finished ? undefined : (await engine.analyze(move.afterFen, budgetMs, 1)).lines[0];
     const beforeLine = beforeRaw.lines[0];
-    const afterLine = afterRaw.lines[0];
-    if (!beforeLine || !afterLine) return fallbackAnalysis(move, "The engine returned no comparable score.", budgetMs);
+    if (!beforeLine || (!finished && !afterLine)) return fallbackAnalysis(move, "The engine returned no comparable score.", budgetMs);
     const before = whiteScore({ cp: beforeLine.cp, mate: beforeLine.mate }, new Chess(move.beforeFen).turn());
-    const after = whiteScore({ cp: afterLine.cp, mate: afterLine.mate }, new Chess(move.afterFen).turn());
+    const after = finished ?? whiteScore({ cp: afterLine!.cp, mate: afterLine!.mate }, position.turn());
     const judged = verdictFor(before, after, move.mover, legalMoveCount === 1);
     return {
       moveId: move.id,
@@ -42,11 +44,11 @@ export async function analyzeMove(engine: UciEngine | undefined, move: MoveRecor
       beforeMate: before.mate,
       afterMate: after.mate,
       lossCp: judged.lossCp,
-      depth: Math.min(beforeLine.depth, afterLine.depth),
+      depth: Math.min(beforeLine.depth, afterLine?.depth ?? beforeLine.depth),
       budgetMs,
       engine: engine.version,
       alternatives: beforeRaw.lines.map((line, i) => lineToCandidate(move.beforeFen, line, `v${i + 1}`)),
-      continuation: lineToCandidate(move.afterFen, afterLine, "reply"),
+      continuation: afterLine && lineToCandidate(move.afterFen, afterLine, "reply"),
       note: judged.note,
     };
   } catch (error) {

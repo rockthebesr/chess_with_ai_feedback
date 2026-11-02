@@ -19,4 +19,28 @@ describe("score orientation and verdicts", () => {
     expect(result.lossCp).toBeUndefined();
     expect(result.verdict).toBe("Mistake");
   });
+
+  it("judges a thrown-away forced mate instead of calling it uncertain", () => {
+    expect(verdictFor({ mate: 3 }, { cp: 200 }, "white").verdict).toBe("Mistake");
+    expect(verdictFor({ mate: -3 }, { cp: -200 }, "black").verdict).toBe("Mistake");
+    expect(verdictFor({ mate: 3 }, { mate: -2 }, "white").verdict).toBe("Mistake");
+    const stillWinning = verdictFor({ mate: 3 }, { cp: 900 }, "white");
+    expect(stillWinning.verdict).toBe("Inaccuracy");
+    expect(stillWinning.note).toContain("still winning");
+  });
+
+  it("treats keeping, creating, and delivering mate as good moves", () => {
+    expect(verdictFor({ mate: 3 }, { mate: 2 }, "white").verdict).toBe("Good move");
+    expect(verdictFor({ mate: 3 }, { mate: 5 }, "white").note).toContain("faster");
+    expect(verdictFor({ cp: 40 }, { mate: 4 }, "white").verdict).toBe("Good move");
+    expect(verdictFor({ mate: -1 }, { mate: 0 }, "black").verdict).toBe("Good move");
+  });
+
+  it("does not blame a player for a mate they could not stop", () => {
+    expect(verdictFor({ mate: -3 }, { mate: -3 }, "white").verdict).toBe("Good move");
+    expect(verdictFor({ mate: 3 }, { mate: 3 }, "black").verdict).toBe("Good move");
+    expect(verdictFor({ mate: -5 }, { mate: -2 }, "white").verdict).toBe("Inaccuracy");
+    expect(verdictFor({ mate: -3 }, { cp: -400 }, "white").note).toContain("escapes");
+    expect(verdictFor({ cp: 30 }, { mate: -2 }, "white", true).verdict).toBe("Good move");
+  });
 });
