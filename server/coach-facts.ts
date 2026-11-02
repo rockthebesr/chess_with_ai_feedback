@@ -1,4 +1,4 @@
-import { Chess, SQUARES, type Square } from "chess.js";
+import { Chess, SQUARES, type Move, type Square } from "chess.js";
 import type { AnalysisRecord, MoveRecord, OpeningMatch } from "../shared/types.js";
 
 const pieceNames: Record<string, string> = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen", k: "king" };
@@ -25,6 +25,8 @@ export interface CoachingFacts {
   newlyLoosePieces: Array<{ color: "w" | "b"; square: string; piece: string }>;
   rescuedPieces: Array<{ color: "w" | "b"; square: string; piece: string }>;
   lineMotifs: Array<{ type: "pin" | "skewer" | "x-ray"; frontSquare: string; frontPiece: string; behindSquare: string; behindPiece: string }>;
+  /** The engine's best answer to this move, replayed on the board. */
+  reply?: { san: string; capturedPiece?: string; capturedSquare?: string; gaveCheck: boolean; materialLost: number };
   materialGain: number;
   materialSwing: number;
   developedFromHome: boolean;
@@ -101,17 +103,39 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
   if (developedFromHome) facts.push({ id: "development", text: `The move developed a ${pieceNames[applied.piece]} from its starting square.` });
   if (castled) facts.push({ id: "castling", text: `${colorNames[applied.color]} castled on this move.` });
   if (centralPawnMove) facts.push({ id: "central_pawn", text: `The move advanced the ${applied.from[0]}-pawn from ${applied.from} to ${applied.to}.` });
+  const reply = replayReply(move.afterFen, analysis, moverColor);
   const best = analysis.alternatives[0];
   if (best?.san[0]) facts.push({ id: "best_alternative", text: `Before the move, Stockfish's verified first alternative was ${best.san[0]}.` });
   if (analysis.continuation?.san.length) facts.push({ id: "reply", text: `After the move, Stockfish's verified continuation begins ${analysis.continuation.san.slice(0, 3).join(" ")}.` });
   if (opening) facts.push({ id: "opening", text: opening.guidanceAvailable
     ? `At this move the opening was ${opening.name}${opening.current ? "" : " (the game had left the named book line)"}. The mover's verified stored plan was: ${moverColor === "w" ? opening.plansWhite : opening.plansBlack}`
     : `At this move the position book identified ${opening.name}${opening.current ? "" : " before the game left the named line"}; no opening-specific strategic plan is stored.` });
-  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
+  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, reply, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
 }
 
 export function factsPacket(facts: CoachingFacts): object {
   return { facts: facts.facts, instruction: "Use only these facts for factual chess claims. Cite the supporting fact IDs in evidenceIds." };
+}
+
+function replayReply(afterFen: string, analysis: AnalysisRecord, moverColor: "w" | "b"): CoachingFacts["reply"] {
+  const line = analysis.continuation?.uci ?? [];
+  if (!line.length) return undefined;
+  const board = new Chess(afterFen);
+  const start = materialBalance(inventory(board), moverColor);
+  let first: Move | undefined;
+  let materialLost = 0;
+  for (const uci of line) {
+    let played: Move;
+    try { played = board.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }); } catch { break; }
+    first ??= played;
+    // A line can stop mid-exchange, so only count material once a quiet move shows the trades have finished.
+    if (!played.captured) materialLost = start - materialBalance(inventory(board), moverColor);
+  }
+  if (!first) return undefined;
+  return {
+    san: first.san, capturedPiece: first.captured ? pieceNames[first.captured] : undefined, capturedSquare: first.captured ? first.to : undefined,
+    gaveCheck: first.san.includes("+") || first.san.includes("#"), materialLost: Math.max(0, materialLost),
+  };
 }
 
 function withTurn(chess: Chess, color: "w" | "b"): Chess {

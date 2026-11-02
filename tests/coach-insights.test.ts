@@ -1,5 +1,6 @@
 import { Chess } from "chess.js";
 import { describe, expect, it } from "vitest";
+import { fallbackCoaching } from "../server/coach.js";
 import { buildCoachingFacts } from "../server/coach-facts.js";
 import { buildVerifiedInsights, renderCoachSelection, validateCoachSelection } from "../server/coach-insights.js";
 import { recognizeOpening } from "../server/openings.js";
@@ -70,6 +71,54 @@ describe("verified coaching insights", () => {
     const pinFacts = buildCoachingFacts(pin, analysis());
     expect(pinFacts.lineMotifs).toContainEqual({ type: "pin", frontSquare: "c6", frontPiece: "knight", behindSquare: "d7", behindPiece: "king" });
     expect(buildVerifiedInsights(pin, analysis(), pinFacts, undefined, false).some((item) => item.id === "line-motif")).toBe(true);
+  });
+
+  describe("what the move allows", () => {
+    const fen = "4k3/8/8/3p4/8/2N5/8/4K3 w - - 0 1";
+    const bad = (uci: string[], extra: Partial<AnalysisRecord> = {}): AnalysisRecord => ({ ...analysis("Blunder"), continuation: { id: "reply", uci, san: [] }, ...extra });
+    const replyInsight = (result: AnalysisRecord, hintsVisible: boolean, position = fen, from = "c3", to = "e4") => {
+      const move = playedMove(position, from, to);
+      return buildVerifiedInsights(move, result, buildCoachingFacts(move, result), undefined, hintsVisible);
+    };
+
+    it("names the punishing capture and leads with it when hints are visible", () => {
+      const [top] = replyInsight(bad(["d5e4", "e1e2"]), true);
+      expect(top.id).toBe("opponent-reply");
+      expect(top.explanation).toBe("After Ne4, your opponent can answer dxe4, capturing your knight on e4. Your opponent comes out about 3 points of material ahead from here.");
+    });
+
+    it("does not count material while an exchange is unfinished", () => {
+      const facts = buildCoachingFacts(playedMove(fen, "c3", "e4"), bad(["d5e4"]));
+      expect(facts.reply).toMatchObject({ san: "dxe4", capturedPiece: "knight", materialLost: 0 });
+    });
+
+    it("never names the reply or the piece when hints are hidden", () => {
+      const [top] = replyInsight(bad(["d5e4", "e1e2"]), false);
+      expect(top.explanation).toBe("Ne4 gives your opponent a strong reply that wins material.");
+      expect(`${top.explanation} ${top.lesson}`).not.toMatch(/dxe4|knight/);
+      expect(replyInsight(bad(["d5e4"]), false).some((item) => item.id === "opponent-reply")).toBe(false);
+    });
+
+    it("explains an allowed mate with or without hints", () => {
+      const mate = bad(["d5e4"], { afterMate: -2 });
+      expect(replyInsight(mate, true)[0].explanation).toBe("After Ne4, dxe4 starts a forced mate in 2.");
+      expect(replyInsight(mate, false)[0].explanation).toBe("Ne4 lets your opponent force checkmate.");
+    });
+
+    it("stays quiet for good moves and when no reply was found", () => {
+      const good = { ...bad(["d5e4", "e1e2"]), verdict: "Good move" as const };
+      expect(replyInsight(good, true).some((item) => item.id === "opponent-reply")).toBe(false);
+      expect(replyInsight(analysis("Blunder"), true).some((item) => item.id === "opponent-reply")).toBe(false);
+    });
+
+    it("gives the same explanation when coaching is offline, respecting hidden hints", () => {
+      const move = playedMove(fen, "c3", "e4");
+      const result = bad(["d5e4", "e1e2"]);
+      expect(fallbackCoaching(move, result, undefined, true).explanation).toContain("dxe4");
+      const hidden = fallbackCoaching(move, result);
+      expect(hidden.explanation).toBe("Ne4 gives your opponent a strong reply that wins material.");
+      expect(hidden.status).toBe("verified-fallback");
+    });
   });
 
   it("accepts only a supplied insight and verified verdict", () => {

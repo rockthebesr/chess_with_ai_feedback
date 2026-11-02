@@ -1,7 +1,7 @@
 import type { AnalysisRecord, MoveRecord, OpeningMatch, Verdict } from "../shared/types.js";
 import type { CoachingFacts } from "./coach-facts.js";
 
-export type InsightKind = "capture" | "loose-piece" | "rescue" | "fork" | "line-motif" | "check" | "castling" | "development" | "central-pawn" | "new-attack" | "opening" | "engine-alternative" | "piece-scope";
+export type InsightKind = "capture" | "loose-piece" | "rescue" | "fork" | "line-motif" | "check" | "castling" | "development" | "central-pawn" | "new-attack" | "opening" | "engine-alternative" | "opponent-reply" | "piece-scope";
 
 export interface VerifiedInsight {
   id: string;
@@ -74,12 +74,44 @@ export function buildVerifiedInsights(move: MoveRecord, analysis: AnalysisRecord
   if (hintsVisible && unfavorable && analysis.alternatives[0]?.san[0]) insights.push({ id: "engine-alternative", kind: "engine-alternative", priority: 90,
     explanation: `${move.san} received a ${analysis.verdict.toLowerCase()} verdict; the verified alternative was ${analysis.alternatives[0].san[0]}.`,
     lesson: `Use the review board to compare ${move.san} with ${analysis.alternatives[0].san[0]} and identify the first different threat.`, evidenceIds: ["played_move", "engine_verdict", "best_alternative"] });
+  if (unfavorable) {
+    const reply = opponentReplyInsight(move, analysis, facts, hintsVisible);
+    if (reply) insights.push(reply);
+  }
   insights.push({ id: "piece-scope", kind: "piece-scope", priority: 10,
     explanation: `${move.san} moved your ${facts.movingPiece} from ${facts.from} to ${facts.to}.`,
     lesson: facts.movedPieceAttacks.length
       ? `From ${facts.to}, check what changes on ${facts.movedPieceAttacks.slice(0, 3).join(", ")} before choosing your next plan.`
       : `Before the next move, check the opponent's checks, captures, and attacks on your ${facts.movingPiece}.`, evidenceIds: ["played_move", "piece_scope"] });
   return insights.sort((a, b) => b.priority - a.priority);
+}
+
+/** Says what the move allows. With hints hidden it stays vague, because the reply may be a live next move. */
+function opponentReplyInsight(move: MoveRecord, analysis: AnalysisRecord, facts: CoachingFacts, hintsVisible: boolean): VerifiedInsight | undefined {
+  const reply = facts.reply;
+  if (!reply) return undefined;
+  const evidenceIds = ["played_move", "reply"];
+  const mateIn = analysis.afterMate === undefined ? undefined : analysis.afterMate * (facts.moverColor === "w" ? 1 : -1);
+  if (mateIn !== undefined && mateIn < 0) {
+    const distance = Math.abs(mateIn);
+    return { id: "opponent-reply", kind: "opponent-reply", priority: 101, evidenceIds,
+      explanation: !hintsVisible ? `${move.san} lets your opponent force checkmate.`
+        : distance === 1 ? `After ${move.san}, ${reply.san} is checkmate.` : `After ${move.san}, ${reply.san} starts a forced mate in ${distance}.`,
+      lesson: "Before each move, look at every check your opponent would have next, starting with those near your king." };
+  }
+  const lesson = "Before each move, go through the checks and captures your opponent would have next, and ask which one hurts most.";
+  if (!hintsVisible) {
+    if (!reply.materialLost) return undefined;
+    return { id: "opponent-reply", kind: "opponent-reply", priority: 101, evidenceIds, lesson,
+      explanation: `${move.san} gives your opponent a strong reply that wins material.` };
+  }
+  if (reply.capturedPiece) {
+    const gain = reply.materialLost ? ` Your opponent comes out about ${reply.materialLost} ${reply.materialLost === 1 ? "point" : "points"} of material ahead from here.` : "";
+    return { id: "opponent-reply", kind: "opponent-reply", priority: 101, evidenceIds, lesson,
+      explanation: `After ${move.san}, your opponent can answer ${reply.san}, capturing your ${reply.capturedPiece} on ${reply.capturedSquare}.${gain}` };
+  }
+  return { id: "opponent-reply", kind: "opponent-reply", priority: 85, evidenceIds, lesson,
+    explanation: `After ${move.san}, your opponent's strongest answer is ${reply.san}${reply.gaveCheck ? ", with check" : ""}.` };
 }
 
 export function validateCoachSelection(selection: CoachSelection, move: MoveRecord, analysis: AnalysisRecord, insights: VerifiedInsight[]): string[] {

@@ -450,10 +450,16 @@ export async function runWithCoachRetries<T>(generate: (feedback: string, attemp
   throw new Error(`Coach could not produce a factually verified response after ${retries} retries: ${feedback}`);
 }
 
-function friendlyFallback(move: MoveRecord, analysis: AnalysisRecord, opening?: OpeningMatch): CoachingRecord {
+function friendlyFallback(move: MoveRecord, analysis: AnalysisRecord, opening: OpeningMatch | undefined, hintsVisible: boolean): CoachingRecord {
   const sound = analysis.verdict === "Good move";
   const plan = move.mover === "white" ? opening?.plansWhite : opening?.plansBlack;
   const facts = buildCoachingFacts(move, analysis, opening);
+  // Offline coaching should still say why a bad move was bad, so use the best insight the model would have chosen from.
+  const insight = analysis.status === "complete" && !sound && analysis.verdict !== "Analysis uncertain"
+    ? buildVerifiedInsights(move, analysis, facts, opening, hintsVisible).find((item) => item.kind !== "piece-scope" && item.kind !== "opening")
+    : undefined;
+  if (insight) return { moveId: move.id, status: "verified-fallback", verdict: analysis.verdict, explanation: insight.explanation, lesson: insight.lesson,
+    provider: "deterministic fallback", error: "Natural-language coaching is unavailable; play can continue." };
   const opponent = move.mover === "white" ? "Black" : "White";
   return {
     moveId: move.id,
@@ -509,6 +515,6 @@ function londonLesson(opening?: OpeningMatch): string | undefined {
     : undefined;
 }
 
-export function fallbackCoaching(move: MoveRecord, analysis: AnalysisRecord, opening?: OpeningMatch): CoachingRecord {
-  return friendlyFallback(move, analysis, opening);
+export function fallbackCoaching(move: MoveRecord, analysis: AnalysisRecord, opening?: OpeningMatch, hintsVisible = false): CoachingRecord {
+  return friendlyFallback(move, analysis, opening, hintsVisible);
 }

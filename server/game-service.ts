@@ -210,7 +210,7 @@ export class GameService {
       const analysis = game.analysis[move.id];
       const openingAtMove = recognizeOpening(game.moves.slice(0, move.ply).map((item) => item.san));
       if (!this.coach.status().available) {
-        game.coaching[move.id] = { ...fallbackCoaching(move, analysis, openingAtMove), followups: game.coaching[move.id]?.followups };
+        game.coaching[move.id] = { ...fallbackCoaching(move, analysis, openingAtMove, game.settings.hintsVisible), followups: game.coaching[move.id]?.followups };
         this.storage.saveGame(game);
         this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: game.coaching[move.id] });
         return;
@@ -242,7 +242,7 @@ export class GameService {
         this.announceProvider();
         const latest = this.get(gameId);
         if (!latest || !this.isCurrentMove(latest, move)) return;
-        const fallback = fallbackCoaching(move, analysis, recognizeOpening(latest.moves.slice(0, move.ply).map((item) => item.san)));
+        const fallback = fallbackCoaching(move, analysis, recognizeOpening(latest.moves.slice(0, move.ply).map((item) => item.san)), latest.settings.hintsVisible);
         fallback.error = error instanceof Error ? error.message : "Coaching failed.";
         fallback.followups = latest.coaching[move.id]?.followups;
         latest.coaching[move.id] = fallback;
