@@ -17,6 +17,7 @@ import type {
 } from "../shared/types.js";
 import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
 import { fallbackCoaching, type CoachProvider } from "./coach.js";
+import { mayNameMoves } from "./coach-insights.js";
 import { recognizeOpening } from "./openings.js";
 import { classifyMistake, summarizePatterns } from "./patterns.js";
 import type { Storage } from "./storage.js";
@@ -274,8 +275,11 @@ export class GameService {
       game.updatedAt = now();
       this.storage.saveGame(game);
       this.emit({ type: "analysis.updated", gameId, moveId: move.id, analysis: game.analysis[move.id] });
-      const coachingStatus = game.coaching[move.id]?.status;
-      if (rechecked.verdict !== current.verdict && coachingStatus !== "skipped") this.enqueueCoaching(gameId, move);
+      // With hints off, a marked-down card stayed vague during play, and it can now name the move.
+      const markedDown = rechecked.verdict !== "Good move" && rechecked.verdict !== "Analysis uncertain";
+      const canNowName = !game.settings.hintsVisible && markedDown;
+      if ((rechecked.verdict !== current.verdict || canNowName) && game.coaching[move.id]?.status !== "skipped")
+        this.enqueueCoaching(gameId, move);
     }
   }
 
@@ -296,7 +300,7 @@ export class GameService {
       const openingAtMove = recognizeOpening(game.moves.slice(0, move.ply).map((item) => item.san));
       if (!this.coach.status().available) {
         game.coaching[move.id] = {
-          ...fallbackCoaching(move, analysis, openingAtMove, game.settings.hintsVisible),
+          ...fallbackCoaching(move, analysis, openingAtMove, mayNameMoves(game)),
           followups: game.coaching[move.id]?.followups,
         };
         this.storage.saveGame(game);
@@ -343,7 +347,7 @@ export class GameService {
           move,
           analysis,
           recognizeOpening(latest.moves.slice(0, move.ply).map((item) => item.san)),
-          latest.settings.hintsVisible,
+          mayNameMoves(latest),
         );
         fallback.error = error instanceof Error ? error.message : "Coaching failed.";
         fallback.followups = latest.coaching[move.id]?.followups;

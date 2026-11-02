@@ -1,4 +1,4 @@
-import type { AnalysisRecord, MoveRecord, OpeningMatch, Verdict } from "../shared/types.js";
+import type { AnalysisRecord, GameState, MoveRecord, OpeningMatch, Verdict } from "../shared/types.js";
 import type { CoachingFacts } from "./coach-facts.js";
 
 export type InsightKind =
@@ -46,6 +46,11 @@ const EXPLAINS_A_BAD_MOVE = new Set<InsightKind>([
 ]);
 
 const values: Record<string, number> = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
+
+/** Coaching may name concrete moves if hints are on, or once the game is over and no live move is left to give away. */
+export function mayNameMoves(game: Pick<GameState, "status" | "settings">): boolean {
+  return game.settings.hintsVisible || game.status === "complete";
+}
 
 export function buildVerifiedInsights(
   move: MoveRecord,

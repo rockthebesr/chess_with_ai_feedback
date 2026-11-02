@@ -377,6 +377,47 @@ describe("authoritative game service", () => {
       storage.close();
     });
 
+    it("names the better move on a vague card once the game is over", async () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+      dirs.push(dir);
+      const storage = new Storage(dir);
+      const offline: CoachProvider = {
+        status: () => ({ available: false }),
+        initialize: async () => ({ available: false }),
+        coach: async () => {
+          throw new Error("offline");
+        },
+        followUp: async () => "",
+        cancel: async () => undefined,
+        close: () => undefined,
+      };
+      const engine = {
+        version: "fake",
+        analyze: async (fen: string) => ({
+          bestMove: "e2e4",
+          lines: [
+            {
+              multipv: 1,
+              depth: 10,
+              cp: fen.includes(" b ") ? 400 : 0,
+              moves: fen.includes(" b ") ? ["e7e5"] : ["e2e4"],
+            },
+          ],
+        }),
+      } as unknown as UciEngine;
+      const service = new GameService(storage, offline, engine, engine, () => undefined);
+      const game = service.create({ mode: "local" });
+      await service.move(game.id, { from: "a2", to: "a3", expectedRevision: 0 });
+      await service.idle();
+      const during = service.get(game.id)!;
+      const moveId = during.moves[0].id;
+      expect(during.coaching[moveId].explanation).not.toContain("e4");
+      service.resign(game.id, "white");
+      await service.idle();
+      expect(service.get(game.id)!.coaching[moveId].explanation).toBe("The engine preferred e4 to a3 here.");
+      storage.close();
+    });
+
     it("records whether the two searches agree on the reply", async () => {
       const replies: Record<number, string> = { 450: "e7e5", 1500: "c7c5" };
       const { service, storage } = recheckSetup(

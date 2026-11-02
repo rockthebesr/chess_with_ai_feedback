@@ -13,6 +13,7 @@ import type {
 import { buildCoachingFacts, factsPacket, type CoachingFacts } from "./coach-facts.js";
 import {
   buildVerifiedInsights,
+  mayNameMoves,
   renderCoachSelection,
   validateCoachSelection,
   type CoachSelection,
@@ -280,7 +281,7 @@ export class CodexCoachProvider implements CoachProvider {
     retries = 3,
   ): Promise<CoachOutput> {
     const facts = buildCoachingFacts(move, analysis, opening);
-    const insights = buildVerifiedInsights(move, analysis, facts, opening, game.settings.hintsVisible);
+    const insights = buildVerifiedInsights(move, analysis, facts, opening, mayNameMoves(game));
     const packet = {
       gameId: game.id,
       moveId: move.id,
@@ -295,12 +296,12 @@ export class CodexCoachProvider implements CoachProvider {
       result: game.result,
       engine: analysis,
       opening,
-      hintsVisible: game.settings.hintsVisible,
+      hintsVisible: mayNameMoves(game),
       gameMode: game.settings.mode,
       verified: factsPacket(facts),
       insights,
     };
-    const policy = game.settings.hintsVisible
+    const policy = mayNameMoves(game)
       ? "You may recommend at most one supplied move, in plain language, only when it makes the lesson clearer."
       : "Do not reveal a concrete next move or continuation. The lesson must not name SAN notation or a destination square; give a position-specific decision rule tied to the played piece instead.";
     const selection = await runWithCoachRetries(
@@ -327,8 +328,8 @@ export class CodexCoachProvider implements CoachProvider {
     retries = 3,
   ): Promise<string> {
     const facts = buildCoachingFacts(move, analysis, game.opening);
-    const insights = buildVerifiedInsights(move, analysis, facts, game.opening, game.settings.hintsVisible);
-    const policy = game.settings.hintsVisible
+    const insights = buildVerifiedInsights(move, analysis, facts, game.opening, mayNameMoves(game));
+    const policy = mayNameMoves(game)
       ? "You may mention only verified candidate lines supplied in the packet."
       : "Do not reveal a concrete best next move, line, or tactic that remains available in the live position. Do not recommend SAN notation or a destination square.";
     const selection = await runWithCoachRetries(
