@@ -8,15 +8,25 @@ import { Storage } from "../server/storage.js";
 import type { UciEngine } from "../server/uci.js";
 
 const dirs: string[] = [];
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 function setup() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+  const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+  dirs.push(dir);
   const storage = new Storage(dir);
   const coach: CoachProvider = {
-    status: () => ({ available: false, error: "offline test" }), initialize: async () => ({ available: false }),
-    coach: async () => { throw new Error("offline"); }, followUp: async () => { throw new Error("offline"); },
-    cancel: async () => undefined, close: () => undefined,
+    status: () => ({ available: false, error: "offline test" }),
+    initialize: async () => ({ available: false }),
+    coach: async () => {
+      throw new Error("offline");
+    },
+    followUp: async () => {
+      throw new Error("offline");
+    },
+    cancel: async () => undefined,
+    close: () => undefined,
   };
   const service = new GameService(storage, coach, undefined, undefined, () => undefined);
   return { service, storage, dir };
@@ -29,8 +39,12 @@ describe("authoritative game service", () => {
     const moved = await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
     expect(moved.moves[0].san).toBe("e4");
     expect(storage.loadGame(game.id)?.moves).toHaveLength(1);
-    await expect(service.move(game.id, { from: "e7", to: "e5", expectedRevision: 0 })).rejects.toMatchObject({ statusCode: 409 });
-    await expect(service.move(game.id, { from: "e7", to: "e3", expectedRevision: 1 })).rejects.toBeInstanceOf(ServiceError);
+    await expect(service.move(game.id, { from: "e7", to: "e5", expectedRevision: 0 })).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    await expect(service.move(game.id, { from: "e7", to: "e3", expectedRevision: 1 })).rejects.toBeInstanceOf(
+      ServiceError,
+    );
     await service.idle();
     storage.close();
   });
@@ -48,10 +62,13 @@ describe("authoritative game service", () => {
 
   it("changes branch identity on undo and does not retain removed feedback", async () => {
     const { service, storage } = setup();
-    const game = service.create({ mode: "local" }); const branch = game.branchId;
+    const game = service.create({ mode: "local" });
+    const branch = game.branchId;
     await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
     const undone = await service.undo(game.id);
-    expect(undone.branchId).not.toBe(branch); expect(undone.moves).toHaveLength(0); expect(Object.keys(undone.coaching)).toHaveLength(0);
+    expect(undone.branchId).not.toBe(branch);
+    expect(undone.moves).toHaveLength(0);
+    expect(Object.keys(undone.coaching)).toHaveLength(0);
     await service.idle();
     storage.close();
   });
@@ -64,7 +81,8 @@ describe("authoritative game service", () => {
     const restarted = await service.restart(game.id);
     expect(restarted.moves).toHaveLength(0);
     expect(restarted.opening).toBeUndefined();
-    await service.idle(); storage.close();
+    await service.idle();
+    storage.close();
   });
 
   it("survives a storage restart", async () => {
@@ -79,14 +97,25 @@ describe("authoritative game service", () => {
   });
 
   it("ignores late coaching after a takeback", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+    dirs.push(dir);
     const storage = new Storage(dir);
-    let finish: ((value: { moveId: string; verdict: "Good move"; explanation: string; lesson: string }) => void) | undefined;
+    let finish:
+      | ((value: { moveId: string; verdict: "Good move"; explanation: string; lesson: string }) => void)
+      | undefined;
     let cancelled = false;
     const coach: CoachProvider = {
-      status: () => ({ available: true, model: "mock" }), initialize: async () => ({ available: true }),
-      coach: async () => await new Promise((resolve) => { finish = (value) => resolve(value); }),
-      followUp: async () => "", cancel: async () => { cancelled = true; }, close: () => undefined,
+      status: () => ({ available: true, model: "mock" }),
+      initialize: async () => ({ available: true }),
+      coach: async () =>
+        await new Promise((resolve) => {
+          finish = (value) => resolve(value);
+        }),
+      followUp: async () => "",
+      cancel: async () => {
+        cancelled = true;
+      },
+      close: () => undefined,
     };
     const service = new GameService(storage, coach, undefined, undefined, () => undefined);
     const game = service.create({ mode: "local" });
@@ -97,19 +126,32 @@ describe("authoritative game service", () => {
     expect(cancelled).toBe(true);
     finish?.({ moveId, verdict: "Good move", explanation: "late", lesson: "late" });
     await service.idle();
-    expect(undone.moves).toHaveLength(0); expect(Object.keys(undone.coaching)).toHaveLength(0);
+    expect(undone.moves).toHaveLength(0);
+    expect(Object.keys(undone.coaching)).toHaveLength(0);
     storage.close();
   });
 
   it("ignores a late bot move after undo changes the branch", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+    dirs.push(dir);
     const storage = new Storage(dir);
     const coach: CoachProvider = {
-      status: () => ({ available: false }), initialize: async () => ({ available: false }), coach: async () => { throw new Error(); },
-      followUp: async () => "", cancel: async () => undefined, close: () => undefined,
+      status: () => ({ available: false }),
+      initialize: async () => ({ available: false }),
+      coach: async () => {
+        throw new Error();
+      },
+      followUp: async () => "",
+      cancel: async () => undefined,
+      close: () => undefined,
     };
     let release: ((result: { bestMove: string; lines: [] }) => void) | undefined;
-    const bot = { analyze: async () => await new Promise((resolve) => { release = resolve; }) } as unknown as UciEngine;
+    const bot = {
+      analyze: async () =>
+        await new Promise((resolve) => {
+          release = resolve;
+        }),
+    } as unknown as UciEngine;
     const service = new GameService(storage, coach, undefined, bot, () => undefined);
     const game = service.create({ mode: "bot", humanColor: "white", practice: "normal" });
     await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
@@ -117,7 +159,8 @@ describe("authoritative game service", () => {
     const undone = await service.undo(game.id);
     release?.({ bestMove: "e7e5", lines: [] });
     await service.idle();
-    expect(undone.moves).toHaveLength(0); expect(undone.turn).toBe("white");
+    expect(undone.moves).toHaveLength(0);
+    expect(undone.turn).toBe("white");
     storage.close();
   });
 
@@ -127,18 +170,27 @@ describe("authoritative game service", () => {
     await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
     const before = service.get(game.id)!.pgn;
     const review = service.review(game.id, 1, [{ from: "e7", to: "e5" }]);
-    expect(review.sans).toEqual(["e5"]); expect(service.get(game.id)!.pgn).toBe(before);
-    await service.idle(); storage.close();
+    expect(review.sans).toEqual(["e5"]);
+    expect(service.get(game.id)!.pgn).toBe(before);
+    await service.idle();
+    storage.close();
   });
 
   it("runs AI coaching for the human move but skips the bot move", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+    dirs.push(dir);
     const storage = new Storage(dir);
     let coachingCalls = 0;
     const coach: CoachProvider = {
-      status: () => ({ available: true, model: "mock" }), initialize: async () => ({ available: true }),
-      coach: async (_game, move) => { coachingCalls += 1; return { moveId: move.id, verdict: "Good move", explanation: "Human lesson", lesson: "Keep going" }; },
-      followUp: async () => "", cancel: async () => undefined, close: () => undefined,
+      status: () => ({ available: true, model: "mock" }),
+      initialize: async () => ({ available: true }),
+      coach: async (_game, move) => {
+        coachingCalls += 1;
+        return { moveId: move.id, verdict: "Good move", explanation: "Human lesson", lesson: "Keep going" };
+      },
+      followUp: async () => "",
+      cancel: async () => undefined,
+      close: () => undefined,
     };
     const bot = { version: "mock bot", analyze: async () => ({ bestMove: "e7e5", lines: [] }) } as unknown as UciEngine;
     const service = new GameService(storage, coach, undefined, bot, () => undefined);
@@ -155,30 +207,43 @@ describe("authoritative game service", () => {
   });
 
   it("does not let slow coaching in one game block another game", async () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+    dirs.push(dir);
     const storage = new Storage(dir);
     let releaseFirst: (() => void) | undefined;
     let firstGameId = "";
     const coach: CoachProvider = {
-      status: () => ({ available: true, model: "mock" }), initialize: async () => ({ available: true }),
+      status: () => ({ available: true, model: "mock" }),
+      initialize: async () => ({ available: true }),
       coach: async (game, move) => {
-        if (game.id === firstGameId) await new Promise<void>((resolve) => { releaseFirst = resolve; });
+        if (game.id === firstGameId)
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
         return { moveId: move.id, verdict: "Analysis uncertain", explanation: `done ${game.id}`, lesson: "verified" };
       },
-      followUp: async () => "", cancel: async () => undefined, close: () => undefined,
+      followUp: async () => "",
+      cancel: async () => undefined,
+      close: () => undefined,
     };
     const service = new GameService(storage, coach, undefined, undefined, () => undefined);
-    const first = service.create({ mode: "local" }); firstGameId = first.id;
+    const first = service.create({ mode: "local" });
+    firstGameId = first.id;
     const second = service.create({ mode: "local" });
     await service.move(first.id, { from: "e2", to: "e4", expectedRevision: 0 });
     await service.move(second.id, { from: "d2", to: "d4", expectedRevision: 0 });
-    for (let i = 0; i < 10 && service.get(second.id)!.coaching[service.get(second.id)!.moves[0].id].status !== "complete"; i += 1) {
+    for (
+      let i = 0;
+      i < 10 && service.get(second.id)!.coaching[service.get(second.id)!.moves[0].id].status !== "complete";
+      i += 1
+    ) {
       await new Promise((resolve) => setImmediate(resolve));
     }
     expect(service.get(first.id)!.coaching[service.get(first.id)!.moves[0].id].status).toBe("streaming");
     expect(service.get(second.id)!.coaching[service.get(second.id)!.moves[0].id].status).toBe("complete");
     releaseFirst?.();
-    await service.idle(); storage.close();
+    await service.idle();
+    storage.close();
   });
 
   it("deletes a saved game and its persisted state", async () => {
@@ -206,10 +271,28 @@ describe("authoritative game service", () => {
 
   it("reports accuracy and evaluation per color from the stored scores", async () => {
     const scores: Record<string, number> = {};
-    const engine = { version: "fake", analyze: async (fen: string) => ({ bestMove: "e2e4", lines: [{ multipv: 1, depth: 10, cp: scores[fen] ?? 0, moves: [] }] }) } as unknown as UciEngine;
-    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+    const engine = {
+      version: "fake",
+      analyze: async (fen: string) => ({
+        bestMove: "e2e4",
+        lines: [{ multipv: 1, depth: 10, cp: scores[fen] ?? 0, moves: [] }],
+      }),
+    } as unknown as UciEngine;
+    const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+    dirs.push(dir);
     const storage = new Storage(dir);
-    const coach: CoachProvider = { status: () => ({ available: false }), initialize: async () => ({ available: false }), coach: async () => { throw new Error("offline"); }, followUp: async () => { throw new Error("offline"); }, cancel: async () => undefined, close: () => undefined };
+    const coach: CoachProvider = {
+      status: () => ({ available: false }),
+      initialize: async () => ({ available: false }),
+      coach: async () => {
+        throw new Error("offline");
+      },
+      followUp: async () => {
+        throw new Error("offline");
+      },
+      cancel: async () => undefined,
+      close: () => undefined,
+    };
     const service = new GameService(storage, coach, engine, undefined, () => undefined);
     const game = service.create({ mode: "local" });
     const first = await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
@@ -239,13 +322,25 @@ describe("authoritative game service", () => {
   describe("post-game verdict recheck", () => {
     // Scores keyed by search budget, so the longer pass can disagree with the live one.
     function recheckSetup(scoreFor: (fen: string, ms: number) => number) {
-      const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+      const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+      dirs.push(dir);
       const storage = new Storage(dir);
       const coached: string[] = [];
       const coach: CoachProvider = {
-        status: () => ({ available: true, authMode: "local", model: "test" }), initialize: async () => ({ available: true }),
-        coach: async (_game, move, analysis) => { coached.push(`${move.san}:${analysis.verdict}`); return { moveId: move.id, verdict: analysis.verdict, explanation: `about ${analysis.verdict}`, lesson: "lesson" }; },
-        followUp: async () => "answer", cancel: async () => undefined, close: () => undefined,
+        status: () => ({ available: true, authMode: "local", model: "test" }),
+        initialize: async () => ({ available: true }),
+        coach: async (_game, move, analysis) => {
+          coached.push(`${move.san}:${analysis.verdict}`);
+          return {
+            moveId: move.id,
+            verdict: analysis.verdict,
+            explanation: `about ${analysis.verdict}`,
+            lesson: "lesson",
+          };
+        },
+        followUp: async () => "answer",
+        cancel: async () => undefined,
+        close: () => undefined,
       };
       const searches: number[] = [];
       const engine = {
@@ -262,14 +357,15 @@ describe("authoritative game service", () => {
     const afterE4 = (fen: string) => fen.includes(" b ");
 
     it("replaces a verdict the longer search disagrees with and re-coaches it", async () => {
-      const { service, storage, coached } = recheckSetup((fen, ms) => afterE4(fen) && ms < LONG ? 400 : 0);
+      const { service, storage, coached } = recheckSetup((fen, ms) => (afterE4(fen) && ms < LONG ? 400 : 0));
       const game = service.create({ mode: "local" });
       await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
       await service.idle();
       expect(service.get(game.id)!.analysis[service.get(game.id)!.moves[0].id].verdict).toBe("Blunder");
       service.resign(game.id, "white");
       await service.idle();
-      const finished = service.get(game.id)!; const move = finished.moves[0];
+      const finished = service.get(game.id)!;
+      const move = finished.moves[0];
       expect(finished.analysis[move.id]).toMatchObject({ verdict: "Good move", rechecked: true, budgetMs: LONG });
       expect(coached).toEqual(["e4:Blunder", "e4:Good move"]);
       expect(finished.coaching[move.id].explanation).toBe("about Good move");
@@ -278,7 +374,7 @@ describe("authoritative game service", () => {
     });
 
     it("keeps follow-up answers when a move is re-coached", async () => {
-      const { service, storage } = recheckSetup((fen, ms) => afterE4(fen) && ms < LONG ? 400 : 0);
+      const { service, storage } = recheckSetup((fen, ms) => (afterE4(fen) && ms < LONG ? 400 : 0));
       const game = service.create({ mode: "local" });
       await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
       await service.idle();
@@ -303,7 +399,7 @@ describe("authoritative game service", () => {
     });
 
     it("drops a recheck when the finished game is taken back", async () => {
-      const { service, storage } = recheckSetup((fen) => afterE4(fen) ? 400 : 0);
+      const { service, storage } = recheckSetup((fen) => (afterE4(fen) ? 400 : 0));
       const game = service.create({ mode: "local" });
       await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
       await service.idle();

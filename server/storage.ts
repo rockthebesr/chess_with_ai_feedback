@@ -65,11 +65,18 @@ export class Storage {
       if (!game) continue;
       let changed = false;
       for (const record of Object.values(game.analysis)) {
-        if (record.status === "pending") { record.status = "unavailable"; record.note = "Analysis was interrupted by an app restart."; changed = true; }
+        if (record.status === "pending") {
+          record.status = "unavailable";
+          record.note = "Analysis was interrupted by an app restart.";
+          changed = true;
+        }
       }
       for (const record of Object.values(game.coaching)) {
         if (record.status === "queued" || record.status === "streaming") {
-          record.status = "unavailable"; record.error = "Coaching was interrupted by an app restart."; delete record.streamedText; changed = true;
+          record.status = "unavailable";
+          record.error = "Coaching was interrupted by an app restart.";
+          delete record.streamedText;
+          changed = true;
         }
       }
       if (changed) this.saveGame(game);
@@ -82,7 +89,8 @@ export class Storage {
       this.unreadable.delete(id);
       return game;
     } catch (error) {
-      if (!this.unreadable.has(id)) console.warn(`Skipping saved game ${id}: ${error instanceof Error ? error.message : "it could not be read"}`);
+      if (!this.unreadable.has(id))
+        console.warn(`Skipping saved game ${id}: ${error instanceof Error ? error.message : "it could not be read"}`);
       this.unreadable.add(id);
       return undefined;
     }
@@ -92,14 +100,25 @@ export class Storage {
     game.stateVersion = GAME_STATE_VERSION;
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db.prepare(`INSERT INTO games
+      this.db
+        .prepare(`INSERT INTO games
         (id,status,mode,white_name,black_name,result,move_count,state_json,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET status=excluded.status, mode=excluded.mode,
         white_name=excluded.white_name, black_name=excluded.black_name, result=excluded.result,
         move_count=excluded.move_count, state_json=excluded.state_json, updated_at=excluded.updated_at`)
-        .run(game.id, game.status, game.settings.mode, game.settings.whiteName, game.settings.blackName,
-          game.result, game.moves.length, JSON.stringify(game), game.createdAt, game.updatedAt);
+        .run(
+          game.id,
+          game.status,
+          game.settings.mode,
+          game.settings.whiteName,
+          game.settings.blackName,
+          game.result,
+          game.moves.length,
+          JSON.stringify(game),
+          game.createdAt,
+          game.updatedAt,
+        );
       this.db.prepare("DELETE FROM moves WHERE game_id = ?").run(game.id);
       const insertMove = this.db.prepare(`INSERT INTO moves
         (id,game_id,branch_id,revision,ply,san,uci,before_fen,after_fen,mover,created_at)
@@ -107,12 +126,24 @@ export class Storage {
       const insertAnalysis = this.db.prepare("INSERT INTO analysis (move_id,status,payload_json) VALUES (?,?,?)");
       const insertCoaching = this.db.prepare("INSERT INTO coaching (move_id,status,payload_json) VALUES (?,?,?)");
       for (const move of game.moves) {
-        insertMove.run(move.id, move.gameId, move.branchId, move.revision, move.ply, move.san, move.uci,
-          move.beforeFen, move.afterFen, move.mover, move.createdAt);
+        insertMove.run(
+          move.id,
+          move.gameId,
+          move.branchId,
+          move.revision,
+          move.ply,
+          move.san,
+          move.uci,
+          move.beforeFen,
+          move.afterFen,
+          move.mover,
+          move.createdAt,
+        );
         const analysis = game.analysis[move.id];
         if (analysis) insertAnalysis.run(move.id, analysis.status, JSON.stringify(analysis));
         const coaching = game.coaching[move.id];
-        if (coaching && coaching.status !== "streaming") insertCoaching.run(move.id, coaching.status, JSON.stringify(coaching));
+        if (coaching && coaching.status !== "streaming")
+          insertCoaching.run(move.id, coaching.status, JSON.stringify(coaching));
       }
       this.db.exec("COMMIT");
     } catch (error) {
@@ -122,16 +153,29 @@ export class Storage {
   }
 
   loadGame(id: string): GameState | undefined {
-    const row = this.db.prepare("SELECT state_json FROM games WHERE id = ?").get(id) as { state_json: string } | undefined;
+    const row = this.db.prepare("SELECT state_json FROM games WHERE id = ?").get(id) as
+      | { state_json: string }
+      | undefined;
     return row ? this.parseRow(id, row.state_json) : undefined;
   }
 
   listGames(): GameSummary[] {
-    return (this.db.prepare(`SELECT id,white_name,black_name,mode,status,result,move_count,updated_at
-      FROM games ORDER BY updated_at DESC`).all() as Array<Record<string, string | number>>).filter((row) => !this.unreadable.has(String(row.id))).map((row) => ({
-        id: String(row.id), whiteName: String(row.white_name), blackName: String(row.black_name),
-        mode: row.mode as GameSummary["mode"], status: row.status as GameSummary["status"],
-        result: String(row.result), moveCount: Number(row.move_count), updatedAt: String(row.updated_at),
+    return (
+      this.db
+        .prepare(`SELECT id,white_name,black_name,mode,status,result,move_count,updated_at
+      FROM games ORDER BY updated_at DESC`)
+        .all() as Array<Record<string, string | number>>
+    )
+      .filter((row) => !this.unreadable.has(String(row.id)))
+      .map((row) => ({
+        id: String(row.id),
+        whiteName: String(row.white_name),
+        blackName: String(row.black_name),
+        mode: row.mode as GameSummary["mode"],
+        status: row.status as GameSummary["status"],
+        result: String(row.result),
+        moveCount: Number(row.move_count),
+        updatedAt: String(row.updated_at),
       }));
   }
 
@@ -143,5 +187,7 @@ export class Storage {
     return Number(this.db.prepare("DELETE FROM games").run().changes);
   }
 
-  close(): void { this.db.close(); }
+  close(): void {
+    this.db.close();
+  }
 }

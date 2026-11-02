@@ -2,6 +2,71 @@ import { Chess } from "chess.js";
 import type { CandidateLine, GameReviewSummary, GameState } from "../shared/types";
 import { GameReview } from "./GameReview";
 
-export function Postgame({ game, summary, summaryFailed, onRetrySummary, ply, practiceCount, onPractice, onSelectPly, onReview }: { game: GameState; summary?: GameReviewSummary; summaryFailed: boolean; onRetrySummary: () => void; ply?: number; practiceCount: number; onPractice: () => void; onSelectPly: (ply: number) => void; onReview: (fen: string, line?: CandidateLine) => void }) {
-  return <section className="postgame"><div className="section-heading"><h2>Game review</h2><a href={`/api/games/${game.id}/pgn`} download>Export PGN</a></div><GameReview game={game} summary={summary} ply={ply} onSelect={onSelectPly} />{!summary ? summaryFailed ? <p className="recap-error">The recap could not be loaded. <button onClick={onRetrySummary}>Try again</button></p> : <p>Building recap…</p> : <><h3>Key moments</h3><ul>{summary.keyMoments.map((item) => <li key={item}>{item}</li>)}</ul><h3>Practical lessons</h3><ul>{summary.lessons.map((item) => <li key={item}>{item}</li>)}</ul>{summary.missing > 0 && <small>{summary.missing} move(s) did not receive full engine analysis.</small>}</>}<div className="postgame-actions">{practiceCount > 0 && <button className="practice-start" onClick={onPractice}>Practice your mistakes ({practiceCount})</button>}<button onClick={() => onReview(game.moves[0]?.beforeFen ?? new Chess().fen())}>Open a separate review board</button></div></section>;
+export function Postgame({
+  game,
+  summary,
+  summaryFailed,
+  onRetrySummary,
+  ply,
+  practiceCount,
+  onPractice,
+  onSelectPly,
+  onReview,
+}: {
+  game: GameState;
+  summary?: GameReviewSummary;
+  summaryFailed: boolean;
+  onRetrySummary: () => void;
+  ply?: number;
+  practiceCount: number;
+  onPractice: () => void;
+  onSelectPly: (ply: number) => void;
+  onReview: (fen: string, line?: CandidateLine) => void;
+}) {
+  return (
+    <section className="postgame">
+      <div className="section-heading">
+        <h2>Game review</h2>
+        <a href={`/api/games/${game.id}/pgn`} download>
+          Export PGN
+        </a>
+      </div>
+      <GameReview game={game} summary={summary} ply={ply} onSelect={onSelectPly} />
+      {!summary ? (
+        summaryFailed ? (
+          <p className="recap-error">
+            The recap could not be loaded. <button onClick={onRetrySummary}>Try again</button>
+          </p>
+        ) : (
+          <p>Building recap…</p>
+        )
+      ) : (
+        <>
+          <h3>Key moments</h3>
+          <ul>
+            {summary.keyMoments.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <h3>Practical lessons</h3>
+          <ul>
+            {summary.lessons.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          {summary.missing > 0 && <small>{summary.missing} move(s) did not receive full engine analysis.</small>}
+        </>
+      )}
+      <div className="postgame-actions">
+        {practiceCount > 0 && (
+          <button className="practice-start" onClick={onPractice}>
+            Practice your mistakes ({practiceCount})
+          </button>
+        )}
+        <button onClick={() => onReview(game.moves[0]?.beforeFen ?? new Chess().fen())}>
+          Open a separate review board
+        </button>
+      </div>
+    </section>
+  );
 }

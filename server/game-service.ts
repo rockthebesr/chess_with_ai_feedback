@@ -1,8 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { Chess, type Move } from "chess.js";
 import type {
-  AnalysisRecord, CoachingRecord, GameReviewSummary, GameSettings, GameState, GameSummary, MistakePattern, MoveRecord,
-  PlayerPatterns, PracticePosition, PracticeResult, ProviderStatus, ServerEvent,
+  AnalysisRecord,
+  CoachingRecord,
+  GameReviewSummary,
+  GameSettings,
+  GameState,
+  GameSummary,
+  MistakePattern,
+  MoveRecord,
+  PlayerPatterns,
+  PracticePosition,
+  PracticeResult,
+  ProviderStatus,
+  ServerEvent,
 } from "../shared/types.js";
 import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
 import { fallbackCoaching, type CoachProvider } from "./coach.js";
@@ -13,12 +24,21 @@ import type { UciEngine } from "./uci.js";
 import { moveAccuracy, winChance, winChanceLoss } from "./verdict.js";
 
 const defaultSettings: GameSettings = {
-  mode: "bot", whiteName: "Rock", blackName: "Coach Bot", humanColor: "white",
-  difficulty: "easy", practice: "normal", autoFlip: false, hintsVisible: false,
-  boardTheme: "forest", pieceStyle: "classic",
+  mode: "bot",
+  whiteName: "Rock",
+  blackName: "Coach Bot",
+  humanColor: "white",
+  difficulty: "easy",
+  practice: "normal",
+  autoFlip: false,
+  hintsVisible: false,
+  boardTheme: "forest",
+  pieceStyle: "classic",
 };
 
-function now(): string { return new Date().toISOString(); }
+function now(): string {
+  return new Date().toISOString();
+}
 
 function chessFor(game: GameState, throughPly = game.moves.length): Chess {
   const chess = new Chess();
@@ -34,7 +54,8 @@ function legalMoves(chess: Chess): GameState["legalMoves"] {
 }
 
 function resultFor(chess: Chess): { status: GameState["status"]; result: string; reason?: string } {
-  if (chess.isCheckmate()) return { status: "complete", result: chess.turn() === "w" ? "0-1" : "1-0", reason: "checkmate" };
+  if (chess.isCheckmate())
+    return { status: "complete", result: chess.turn() === "w" ? "0-1" : "1-0", reason: "checkmate" };
   if (chess.isStalemate()) return { status: "complete", result: "1/2-1/2", reason: "stalemate" };
   if (chess.isThreefoldRepetition()) return { status: "complete", result: "1/2-1/2", reason: "threefold repetition" };
   if (chess.isInsufficientMaterial()) return { status: "complete", result: "1/2-1/2", reason: "insufficient material" };
@@ -48,7 +69,13 @@ function botColor(game: GameState): "white" | "black" {
 }
 
 function moveWinChanceLoss({ move, analysis }: { move: MoveRecord; analysis: AnalysisRecord }): number {
-  return winChanceLoss({ cp: analysis.beforeCp, mate: analysis.beforeMate }, { cp: analysis.afterCp, mate: analysis.afterMate }, move.mover) ?? 0;
+  return (
+    winChanceLoss(
+      { cp: analysis.beforeCp, mate: analysis.beforeMate },
+      { cp: analysis.afterCp, mate: analysis.afterMate },
+      move.mover,
+    ) ?? 0
+  );
 }
 
 const PRACTICE_ANALYSIS_MS = 600;
@@ -57,7 +84,9 @@ const RECHECK_ANALYSIS_MS = 1500;
 // Moves this close to the inaccuracy line can flip between searches, so they are rechecked too.
 const RECHECK_MIN_LOSS = 3;
 const BOT_THINKING_MS = 850;
-function wait(ms: number): Promise<void> { return new Promise((resolve) => setTimeout(resolve, ms)); }
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export class GameService {
   private games = new Map<string, GameState>();
@@ -82,9 +111,15 @@ export class GameService {
     for (const game of this.games.values()) this.resumeBot(game);
   }
 
-  list(): GameSummary[] { return this.storage.listGames(); }
-  get(id: string): GameState | undefined { return this.games.get(id) ?? this.load(id); }
-  providerStatus(): ProviderStatus { return this.coach.status(); }
+  list(): GameSummary[] {
+    return this.storage.listGames();
+  }
+  get(id: string): GameState | undefined {
+    return this.games.get(id) ?? this.load(id);
+  }
+  providerStatus(): ProviderStatus {
+    return this.coach.status();
+  }
 
   private load(id: string): GameState | undefined {
     const game = this.storage.loadGame(id);
@@ -99,7 +134,8 @@ export class GameService {
 
   create(input: Partial<GameSettings>): GameState {
     const settings: GameSettings = {
-      ...defaultSettings, ...input,
+      ...defaultSettings,
+      ...input,
       whiteName: (input.whiteName || defaultSettings.whiteName).slice(0, 40),
       blackName: (input.blackName || (input.mode === "local" ? "Christine" : defaultSettings.blackName)).slice(0, 40),
     };
@@ -115,9 +151,22 @@ export class GameService {
     const chess = new Chess();
     const timestamp = now();
     const game: GameState = {
-      id: randomUUID(), branchId: randomUUID(), revision: 0, settings, fen: chess.fen(),
-      turn: "white", status: "active", result: "*", paused: false, pgn: "", moves: [],
-      legalMoves: legalMoves(chess), analysis: {}, coaching: {}, createdAt: timestamp, updatedAt: timestamp,
+      id: randomUUID(),
+      branchId: randomUUID(),
+      revision: 0,
+      settings,
+      fen: chess.fen(),
+      turn: "white",
+      status: "active",
+      result: "*",
+      paused: false,
+      pgn: "",
+      moves: [],
+      legalMoves: legalMoves(chess),
+      analysis: {},
+      coaching: {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
     };
     this.games.set(game.id, game);
     this.persistAndEmit(game);
@@ -125,30 +174,50 @@ export class GameService {
     return game;
   }
 
-  async move(id: string, intent: { from: string; to: string; promotion?: string; expectedRevision: number }, source: "human" | "bot" = "human"): Promise<GameState> {
+  async move(
+    id: string,
+    intent: { from: string; to: string; promotion?: string; expectedRevision: number },
+    source: "human" | "bot" = "human",
+  ): Promise<GameState> {
     const game = this.requireGame(id);
     if (game.status !== "active") throw new ServiceError(409, "This game has ended.");
     if (game.paused) throw new ServiceError(409, "Guided practice is paused. Choose Continue first.");
-    if (intent.expectedRevision !== game.revision) throw new ServiceError(409, "The board changed. Refresh and try again.");
-    if (game.settings.mode === "bot" && source === "human" && game.turn === botColor(game)) throw new ServiceError(409, "It is the bot's turn.");
+    if (intent.expectedRevision !== game.revision)
+      throw new ServiceError(409, "The board changed. Refresh and try again.");
+    if (game.settings.mode === "bot" && source === "human" && game.turn === botColor(game))
+      throw new ServiceError(409, "It is the bot's turn.");
     const chess = chessFor(game);
     const beforeFen = chess.fen();
     const beforeLegalCount = chess.moves().length;
     let applied: Move;
-    try { applied = chess.move({ from: intent.from, to: intent.to, promotion: intent.promotion }); }
-    catch { throw new ServiceError(400, "That move is not legal in the current position."); }
+    try {
+      applied = chess.move({ from: intent.from, to: intent.to, promotion: intent.promotion });
+    } catch {
+      throw new ServiceError(400, "That move is not legal in the current position.");
+    }
     const moveRevision = game.revision + 1;
     const record: MoveRecord = {
-      id: randomUUID(), gameId: game.id, branchId: game.branchId, revision: moveRevision,
-      ply: game.moves.length + 1, mover: applied.color === "w" ? "white" : "black",
-      beforeFen, afterFen: chess.fen(), san: applied.san,
-      uci: `${applied.from}${applied.to}${applied.promotion ?? ""}`, createdAt: now(),
+      id: randomUUID(),
+      gameId: game.id,
+      branchId: game.branchId,
+      revision: moveRevision,
+      ply: game.moves.length + 1,
+      mover: applied.color === "w" ? "white" : "black",
+      beforeFen,
+      afterFen: chess.fen(),
+      san: applied.san,
+      uci: `${applied.from}${applied.to}${applied.promotion ?? ""}`,
+      createdAt: now(),
     };
     game.revision = moveRevision;
     game.moves.push(record);
     game.analysis[record.id] = {
-      moveId: record.id, status: "pending", verdict: "Analysis uncertain", budgetMs: LIVE_ANALYSIS_MS,
-      engine: this.analysisEngine?.version ?? "rules fallback", alternatives: [],
+      moveId: record.id,
+      status: "pending",
+      verdict: "Analysis uncertain",
+      budgetMs: LIVE_ANALYSIS_MS,
+      engine: this.analysisEngine?.version ?? "rules fallback",
+      alternatives: [],
     };
     game.coaching[record.id] = { moveId: record.id, status: source === "bot" ? "skipped" : "queued" };
     this.refreshDerived(game, chess);
@@ -187,7 +256,12 @@ export class GameService {
     for (const move of moves) {
       const current = this.get(gameId)?.analysis[move.id];
       if (current?.status !== "complete" || !this.worthRechecking(move, current)) continue;
-      const rechecked = await analyzeMove(this.analysisEngine, move, new Chess(move.beforeFen).moves().length, RECHECK_ANALYSIS_MS);
+      const rechecked = await analyzeMove(
+        this.analysisEngine,
+        move,
+        new Chess(move.beforeFen).moves().length,
+        RECHECK_ANALYSIS_MS,
+      );
       const game = this.get(gameId);
       if (!game || game.branchId !== branchId || !this.isCurrentMove(game, move)) return;
       if (rechecked.status !== "complete") continue;
@@ -201,7 +275,10 @@ export class GameService {
   }
 
   private worthRechecking(move: MoveRecord, analysis: AnalysisRecord): boolean {
-    return !analysis.rechecked && (analysis.verdict !== "Good move" || moveWinChanceLoss({ move, analysis }) >= RECHECK_MIN_LOSS);
+    return (
+      !analysis.rechecked &&
+      (analysis.verdict !== "Good move" || moveWinChanceLoss({ move, analysis }) >= RECHECK_MIN_LOSS)
+    );
   }
 
   private enqueueCoaching(gameId: string, move: MoveRecord): void {
@@ -213,12 +290,20 @@ export class GameService {
       const analysis = game.analysis[move.id];
       const openingAtMove = recognizeOpening(game.moves.slice(0, move.ply).map((item) => item.san));
       if (!this.coach.status().available) {
-        game.coaching[move.id] = { ...fallbackCoaching(move, analysis, openingAtMove, game.settings.hintsVisible), followups: game.coaching[move.id]?.followups };
+        game.coaching[move.id] = {
+          ...fallbackCoaching(move, analysis, openingAtMove, game.settings.hintsVisible),
+          followups: game.coaching[move.id]?.followups,
+        };
         this.storage.saveGame(game);
         this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: game.coaching[move.id] });
         return;
       }
-      const streaming: CoachingRecord = { moveId: move.id, status: "streaming", streamedText: "", followups: game.coaching[move.id]?.followups };
+      const streaming: CoachingRecord = {
+        moveId: move.id,
+        status: "streaming",
+        streamedText: "",
+        followups: game.coaching[move.id]?.followups,
+      };
       game.coaching[move.id] = streaming;
       this.emit({ type: "coaching.updated", gameId, moveId: move.id, coaching: streaming });
       try {
@@ -234,9 +319,13 @@ export class GameService {
         const latest = this.get(gameId);
         if (!latest || !this.isCurrentMove(latest, move)) return;
         latest.coaching[move.id] = {
-          moveId: move.id, status: "complete", verdict: result.verdict,
-          explanation: result.explanation, lesson: result.lesson,
-          provider: source.authMode === "local" ? "Local Gemma" : "Codex App Server", model: source.model,
+          moveId: move.id,
+          status: "complete",
+          verdict: result.verdict,
+          explanation: result.explanation,
+          lesson: result.lesson,
+          provider: source.authMode === "local" ? "Local Gemma" : "Codex App Server",
+          model: source.model,
           followups: latest.coaching[move.id]?.followups,
         };
         this.storage.saveGame(latest);
@@ -245,7 +334,12 @@ export class GameService {
         this.announceProvider();
         const latest = this.get(gameId);
         if (!latest || !this.isCurrentMove(latest, move)) return;
-        const fallback = fallbackCoaching(move, analysis, recognizeOpening(latest.moves.slice(0, move.ply).map((item) => item.san)), latest.settings.hintsVisible);
+        const fallback = fallbackCoaching(
+          move,
+          analysis,
+          recognizeOpening(latest.moves.slice(0, move.ply).map((item) => item.san)),
+          latest.settings.hintsVisible,
+        );
         fallback.error = error instanceof Error ? error.message : "Coaching failed.";
         fallback.followups = latest.coaching[move.id]?.followups;
         latest.coaching[move.id] = fallback;
@@ -256,11 +350,14 @@ export class GameService {
     const previous = this.coachingChains.get(gameId) ?? Promise.resolve();
     const next = previous.then(run, run);
     this.coachingChains.set(gameId, next);
-    void next.finally(() => { if (this.coachingChains.get(gameId) === next) this.coachingChains.delete(gameId); });
+    void next.finally(() => {
+      if (this.coachingChains.get(gameId) === next) this.coachingChains.delete(gameId);
+    });
   }
 
   private resumeBot(game: GameState): void {
-    if (game.settings.mode === "bot" && game.status === "active" && !game.paused && game.turn === botColor(game)) this.track(this.scheduleBot(game));
+    if (game.settings.mode === "bot" && game.status === "active" && !game.paused && game.turn === botColor(game))
+      this.track(this.scheduleBot(game));
   }
 
   private announceProvider(): void {
@@ -278,7 +375,14 @@ export class GameService {
     const selected = await chooseBotMove(this.botEngine, fen, game.settings.difficulty);
     await wait(BOT_THINKING_MS);
     const latest = this.get(game.id);
-    if (!latest || latest.branchId !== branchId || latest.revision !== revision || latest.paused || latest.status !== "active") return;
+    if (
+      !latest ||
+      latest.branchId !== branchId ||
+      latest.revision !== revision ||
+      latest.paused ||
+      latest.status !== "active"
+    )
+      return;
     if (latest.turn !== botColor(latest)) return;
     await this.move(latest.id, { ...selected, expectedRevision: revision }, "bot").catch(() => undefined);
   }
@@ -289,7 +393,8 @@ export class GameService {
     game.paused = false;
     game.updatedAt = now();
     this.persistAndEmit(game);
-    if (game.settings.mode === "bot" && game.status === "active" && game.turn === botColor(game)) this.track(this.scheduleBot(game));
+    if (game.settings.mode === "bot" && game.status === "active" && game.turn === botColor(game))
+      this.track(this.scheduleBot(game));
     return game;
   }
 
@@ -301,7 +406,8 @@ export class GameService {
     const removed = game.moves.splice(Math.max(0, game.moves.length - count), count);
     for (const move of removed) {
       await this.coach.cancel(move.id);
-      delete game.analysis[move.id]; delete game.coaching[move.id];
+      delete game.analysis[move.id];
+      delete game.coaching[move.id];
     }
     game.branchId = randomUUID();
     game.revision += 1;
@@ -315,8 +421,12 @@ export class GameService {
   async restart(id: string): Promise<GameState> {
     const game = this.requireGame(id);
     for (const move of game.moves) await this.coach.cancel(move.id);
-    game.moves = []; game.analysis = {}; game.coaching = {};
-    game.branchId = randomUUID(); game.revision += 1; game.paused = false;
+    game.moves = [];
+    game.analysis = {};
+    game.coaching = {};
+    game.branchId = randomUUID();
+    game.revision += 1;
+    game.paused = false;
     this.refreshDerived(game, new Chess());
     this.persistAndEmit(game);
     if (game.settings.mode === "bot" && botColor(game) === "white") this.track(this.scheduleBot(game));
@@ -347,31 +457,46 @@ export class GameService {
     const game = this.requireGame(id);
     if (game.status !== "active") throw new ServiceError(409, "This game has ended.");
     const resigning = color ?? game.turn;
-    game.status = "complete"; game.result = resigning === "white" ? "0-1" : "1-0";
-    game.resultReason = `${resigning} resigned`; game.paused = false; game.revision += 1;
-    this.persistAndEmit(game); this.scheduleRecheck(game); return game;
+    game.status = "complete";
+    game.result = resigning === "white" ? "0-1" : "1-0";
+    game.resultReason = `${resigning} resigned`;
+    game.paused = false;
+    game.revision += 1;
+    this.persistAndEmit(game);
+    this.scheduleRecheck(game);
+    return game;
   }
 
   agreeDraw(id: string): GameState {
     const game = this.requireGame(id);
     if (game.status !== "active") throw new ServiceError(409, "This game has ended.");
-    if (game.settings.mode !== "local") throw new ServiceError(409, "Draw by agreement is available only in two-player games.");
-    game.status = "complete"; game.result = "1/2-1/2"; game.resultReason = "draw by agreement";
-    game.paused = false; game.revision += 1; this.persistAndEmit(game); this.scheduleRecheck(game); return game;
+    if (game.settings.mode !== "local")
+      throw new ServiceError(409, "Draw by agreement is available only in two-player games.");
+    game.status = "complete";
+    game.result = "1/2-1/2";
+    game.resultReason = "draw by agreement";
+    game.paused = false;
+    game.revision += 1;
+    this.persistAndEmit(game);
+    this.scheduleRecheck(game);
+    return game;
   }
 
   async ask(id: string, moveId: string, question: string): Promise<string> {
     const game = this.requireGame(id);
     const move = game.moves.find((item) => item.id === moveId);
     if (!move) throw new ServiceError(404, "That move is no longer part of this game.");
-    if (game.settings.mode === "bot" && move.mover === botColor(game)) throw new ServiceError(409, "AI coaching is only available for human moves.");
+    if (game.settings.mode === "bot" && move.mover === botColor(game))
+      throw new ServiceError(409, "AI coaching is only available for human moves.");
     const analysis = game.analysis[moveId];
     if (!analysis) throw new ServiceError(409, "Analysis is not ready yet.");
     await this.coach.refresh?.();
     this.announceProvider();
-    if (!this.coach.status().available) throw new ServiceError(503, this.coach.status().error ?? "Coaching is unavailable.");
+    if (!this.coach.status().available)
+      throw new ServiceError(503, this.coach.status().error ?? "Coaching is unavailable.");
     const openingAtMove = recognizeOpening(game.moves.slice(0, move.ply).map((item) => item.san));
-    const answer = await this.coach.followUp({ ...game, opening: openingAtMove }, move, analysis, question.slice(0, 500))
+    const answer = await this.coach
+      .followUp({ ...game, opening: openingAtMove }, move, analysis, question.slice(0, 500))
       .finally(() => this.announceProvider());
     const record = game.coaching[moveId] ?? { moveId, status: "complete" };
     record.followups = [...(record.followups ?? []), { question: question.slice(0, 500), answer, createdAt: now() }];
@@ -381,41 +506,69 @@ export class GameService {
     return answer;
   }
 
-  review(id: string, throughPly: number, moves: Array<{ from: string; to: string; promotion?: string }>): { fen: string; sans: string[]; legalMoves: GameState["legalMoves"] } {
+  review(
+    id: string,
+    throughPly: number,
+    moves: Array<{ from: string; to: string; promotion?: string }>,
+  ): { fen: string; sans: string[]; legalMoves: GameState["legalMoves"] } {
     const game = this.requireGame(id);
     if (throughPly < 0 || throughPly > game.moves.length) throw new ServiceError(400, "Invalid review position.");
     const chess = chessFor(game, throughPly);
     const sans: string[] = [];
     for (const move of moves.slice(0, 20)) {
-      try { sans.push(chess.move(move).san); } catch { throw new ServiceError(400, "That review line contains an illegal move."); }
+      try {
+        sans.push(chess.move(move).san);
+      } catch {
+        throw new ServiceError(400, "That review line contains an illegal move.");
+      }
     }
     return { fen: chess.fen(), sans, legalMoves: legalMoves(chess) };
   }
 
   postgameSummary(id: string): GameReviewSummary {
     const game = this.requireGame(id);
-    const completed = game.moves.map((move) => ({ move, analysis: game.analysis[move.id] })).filter((item) => item.analysis?.status === "complete");
+    const completed = game.moves
+      .map((move) => ({ move, analysis: game.analysis[move.id] }))
+      .filter((item) => item.analysis?.status === "complete");
     const keyMoments = completed
       .filter((item) => item.analysis.verdict !== "Good move")
       .sort((a, b) => moveWinChanceLoss(b) - moveWinChanceLoss(a))
       .slice(0, 3)
-      .map((item) => `${Math.ceil(item.move.ply / 2)}${item.move.mover === "black" ? "…" : "."} ${item.move.san}: ${item.analysis.verdict === "Blunder" ? "This move badly damaged the position" : item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`);
+      .map(
+        (item) =>
+          `${Math.ceil(item.move.ply / 2)}${item.move.mover === "black" ? "…" : "."} ${item.move.san}: ${item.analysis.verdict === "Blunder" ? "This move badly damaged the position" : item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`,
+      );
     const lessons = keyMoments.length
-      ? ["At each critical turn, scan checks, captures, and threats before choosing a move.", "Review the alternatives on a separate board; the recorded game will not change."]
+      ? [
+          "At each critical turn, scan checks, captures, and threats before choosing a move.",
+          "Review the alternatives on a separate board; the recorded game will not change.",
+        ]
       : ["Development and king safety were the main practical themes."];
     const averageAccuracy = (mover: "white" | "black") => {
       const moves = completed.filter((item) => item.move.mover === mover);
       if (!moves.length) return undefined;
-      return Math.round(moves.reduce((total, item) => total + moveAccuracy(moveWinChanceLoss(item)), 0) / moves.length * 10) / 10;
+      return (
+        Math.round(
+          (moves.reduce((total, item) => total + moveAccuracy(moveWinChanceLoss(item)), 0) / moves.length) * 10,
+        ) / 10
+      );
     };
     const evaluation = completed.flatMap(({ move, analysis }) => {
       const moverChance = winChance({ cp: analysis.afterCp, mate: analysis.afterMate }, move.mover);
       if (moverChance === undefined) return [];
-      return [{ ply: move.ply, whiteWinChance: Math.round((move.mover === "white" ? moverChance : 100 - moverChance) * 10) / 10 }];
+      return [
+        {
+          ply: move.ply,
+          whiteWinChance: Math.round((move.mover === "white" ? moverChance : 100 - moverChance) * 10) / 10,
+        },
+      ];
     });
     return {
-      keyMoments: keyMoments.length ? keyMoments : ["No major engine swing was recorded."], lessons, missing: game.moves.length - completed.length,
-      accuracy: { white: averageAccuracy("white"), black: averageAccuracy("black") }, evaluation,
+      keyMoments: keyMoments.length ? keyMoments : ["No major engine swing was recorded."],
+      lessons,
+      missing: game.moves.length - completed.length,
+      accuracy: { white: averageAccuracy("white"), black: averageAccuracy("black") },
+      evaluation,
     };
   }
 
@@ -434,30 +587,58 @@ export class GameService {
 
   practicePositions(id: string): PracticePosition[] {
     return this.practiceMoves(this.requireGame(id)).map(({ move, analysis }) => ({
-      moveId: move.id, fen: move.beforeFen, mover: move.mover, playedSan: move.san, verdict: analysis.verdict, bestSan: analysis.alternatives[0]?.san[0],
+      moveId: move.id,
+      fen: move.beforeFen,
+      mover: move.mover,
+      playedSan: move.san,
+      verdict: analysis.verdict,
+      bestSan: analysis.alternatives[0]?.san[0],
     }));
   }
 
   /** Scores a retry with a fresh engine search. It never touches the recorded game. */
-  async practiceAttempt(id: string, moveId: string, attempt: { from: string; to: string; promotion?: string }): Promise<PracticeResult> {
+  async practiceAttempt(
+    id: string,
+    moveId: string,
+    attempt: { from: string; to: string; promotion?: string },
+  ): Promise<PracticeResult> {
     const target = this.practiceMoves(this.requireGame(id)).find((item) => item.move.id === moveId);
     if (!target) throw new ServiceError(404, "That position is not available for practice.");
     const { move, analysis } = target;
     const board = new Chess(move.beforeFen);
     const legalCount = board.moves().length;
     let played: Move;
-    try { played = board.move(attempt); } catch { throw new ServiceError(400, "That move is not legal in this position."); }
+    try {
+      played = board.move(attempt);
+    } catch {
+      throw new ServiceError(400, "That move is not legal in this position.");
+    }
     const san = played.san;
     const uci = `${played.from}${played.to}${played.promotion ?? ""}`;
-    if (uci === move.uci) return { solved: false, san, explanation: `${san} is the move you played in the game. Look for something different.` };
+    if (uci === move.uci)
+      return {
+        solved: false,
+        san,
+        explanation: `${san} is the move you played in the game. Look for something different.`,
+      };
     const solved = (explanation: string): PracticeResult => ({ solved: true, san, explanation });
     if (uci === analysis.alternatives[0]?.uci[0]) return solved(`${san} is the engine's top choice here. Well found.`);
-    const retried = await analyzeMove(this.analysisEngine, { ...move, id: `${move.id}:practice`, afterFen: board.fen(), san, uci }, legalCount, PRACTICE_ANALYSIS_MS);
+    const retried = await analyzeMove(
+      this.analysisEngine,
+      { ...move, id: `${move.id}:practice`, afterFen: board.fen(), san, uci },
+      legalCount,
+      PRACTICE_ANALYSIS_MS,
+    );
     const game = this.get(id);
-    if (!game || !this.isCurrentMove(game, move)) throw new ServiceError(409, "This game has changed. Reopen practice to continue.");
+    if (!game || !this.isCurrentMove(game, move))
+      throw new ServiceError(409, "This game has changed. Reopen practice to continue.");
     if (retried.status !== "complete") throw new ServiceError(503, "The engine could not check that move. Try again.");
     if (retried.verdict === "Good move") return solved(`${san} keeps the position in good shape. Well found.`);
-    return { solved: false, san, explanation: `${san} would ${retried.verdict === "Analysis uncertain" ? "be hard to judge" : `be ${retried.verdict === "Inaccuracy" ? "an inaccuracy" : `a ${retried.verdict.toLowerCase()}`}`} here. Try another move.` };
+    return {
+      solved: false,
+      san,
+      explanation: `${san} would ${retried.verdict === "Analysis uncertain" ? "be hard to judge" : `be ${retried.verdict === "Inaccuracy" ? "an inaccuracy" : `a ${retried.verdict.toLowerCase()}`}`} here. Try another move.`,
+    };
   }
 
   /** Bad moves by the people playing, once the game is over and there is nothing left to give away. */
@@ -466,17 +647,27 @@ export class GameService {
     return game.moves.flatMap((move) => {
       const analysis = game.analysis[move.id];
       const byPlayer = game.settings.mode === "local" || move.mover === game.settings.humanColor;
-      return byPlayer && analysis?.status === "complete" && (analysis.verdict === "Mistake" || analysis.verdict === "Blunder") ? [{ move, analysis }] : [];
+      return byPlayer &&
+        analysis?.status === "complete" &&
+        (analysis.verdict === "Mistake" || analysis.verdict === "Blunder")
+        ? [{ move, analysis }]
+        : [];
     });
   }
 
   private isCurrentMove(game: GameState, move: MoveRecord): boolean {
-    return game.branchId === move.branchId && game.moves.some((item) => item.id === move.id && item.revision === move.revision);
+    return (
+      game.branchId === move.branchId &&
+      game.moves.some((item) => item.id === move.id && item.revision === move.revision)
+    );
   }
 
   private track(task: Promise<unknown>): void {
     this.tasks.add(task);
-    void task.then(() => this.tasks.delete(task), () => this.tasks.delete(task));
+    void task.then(
+      () => this.tasks.delete(task),
+      () => this.tasks.delete(task),
+    );
   }
 
   async idle(): Promise<void> {
@@ -487,9 +678,14 @@ export class GameService {
   }
 
   private refreshDerived(game: GameState, chess: Chess): void {
-    game.fen = chess.fen(); game.turn = playerForTurn(chess.turn());
-    const outcome = resultFor(chess); game.status = outcome.status; game.result = outcome.result; game.resultReason = outcome.reason;
-    game.legalMoves = legalMoves(chess); game.pgn = chess.pgn();
+    game.fen = chess.fen();
+    game.turn = playerForTurn(chess.turn());
+    const outcome = resultFor(chess);
+    game.status = outcome.status;
+    game.result = outcome.result;
+    game.resultReason = outcome.reason;
+    game.legalMoves = legalMoves(chess);
+    game.pgn = chess.pgn();
     const recognized = recognizeOpening(game.moves.map((move) => move.san));
     if (recognized) game.opening = recognized;
     else game.opening = undefined;
@@ -497,14 +693,23 @@ export class GameService {
   }
 
   private persistAndEmit(game: GameState): void {
-    game.updatedAt = now(); this.storage.saveGame(game); this.emit({ type: "game.updated", game });
+    game.updatedAt = now();
+    this.storage.saveGame(game);
+    this.emit({ type: "game.updated", game });
   }
 
   private requireGame(id: string): GameState {
-    const game = this.get(id); if (!game) throw new ServiceError(404, "Game not found."); return game;
+    const game = this.get(id);
+    if (!game) throw new ServiceError(404, "Game not found.");
+    return game;
   }
 }
 
 export class ServiceError extends Error {
-  constructor(readonly statusCode: number, message: string) { super(message); }
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }

@@ -9,11 +9,30 @@ import type { AnalysisRecord, MoveRecord } from "../shared/types.js";
 function playedMove(fen: string, from: string, to: string, promotion?: string): MoveRecord {
   const chess = new Chess(fen);
   const played = chess.move({ from, to, promotion });
-  return { id: "m", gameId: "g", branchId: "b", revision: 1, ply: 1, mover: played.color === "w" ? "white" : "black", beforeFen: fen, afterFen: chess.fen(), san: played.san, uci: `${from}${to}${promotion ?? ""}`, createdAt: "" };
+  return {
+    id: "m",
+    gameId: "g",
+    branchId: "b",
+    revision: 1,
+    ply: 1,
+    mover: played.color === "w" ? "white" : "black",
+    beforeFen: fen,
+    afterFen: chess.fen(),
+    san: played.san,
+    uci: `${from}${to}${promotion ?? ""}`,
+    createdAt: "",
+  };
 }
 
 function analysis(verdict: AnalysisRecord["verdict"] = "Good move"): AnalysisRecord {
-  return { moveId: "m", status: "complete", verdict, budgetMs: 450, engine: "test", alternatives: [{ id: "v1", uci: ["g1f3"], san: ["Nf3"] }] };
+  return {
+    moveId: "m",
+    status: "complete",
+    verdict,
+    budgetMs: 450,
+    engine: "test",
+    alternatives: [{ id: "v1", uci: ["g1f3"], san: ["Nf3"] }],
+  };
 }
 
 describe("verified coaching insights", () => {
@@ -58,24 +77,43 @@ describe("verified coaching insights", () => {
     const chess = new Chess();
     for (const san of ["e4", "e5", "Nf3", "Nc6"]) chess.move(san);
     const attack = playedMove(chess.fen(), "f1", "b5");
-    expect(buildCoachingFacts(attack, analysis()).newlyAttackedPieces).toContainEqual({ square: "c6", piece: "knight" });
+    expect(buildCoachingFacts(attack, analysis()).newlyAttackedPieces).toContainEqual({
+      square: "c6",
+      piece: "knight",
+    });
   });
 
   it("derives forks and line motifs instead of asking the model to invent them", () => {
     const fork = playedMove("4k3/8/3r3q/8/3N4/8/8/6K1 w - - 0 1", "d4", "f5");
     const forkFacts = buildCoachingFacts(fork, analysis());
-    expect(forkFacts.newlyAttackedPieces).toEqual(expect.arrayContaining([{ square: "d6", piece: "rook" }, { square: "h6", piece: "queen" }]));
-    expect(buildVerifiedInsights(fork, analysis(), forkFacts, undefined, false).some((item) => item.id === "piece-fork")).toBe(true);
+    expect(forkFacts.newlyAttackedPieces).toEqual(
+      expect.arrayContaining([
+        { square: "d6", piece: "rook" },
+        { square: "h6", piece: "queen" },
+      ]),
+    );
+    expect(
+      buildVerifiedInsights(fork, analysis(), forkFacts, undefined, false).some((item) => item.id === "piece-fork"),
+    ).toBe(true);
 
     const pin = playedMove("8/3k4/2n5/8/8/8/4B3/6K1 w - - 0 1", "e2", "b5");
     const pinFacts = buildCoachingFacts(pin, analysis());
-    expect(pinFacts.lineMotifs).toContainEqual({ type: "pin", frontSquare: "c6", frontPiece: "knight", behindSquare: "d7", behindPiece: "king" });
-    expect(buildVerifiedInsights(pin, analysis(), pinFacts, undefined, false).some((item) => item.id === "line-motif")).toBe(true);
+    expect(pinFacts.lineMotifs).toContainEqual({
+      type: "pin",
+      frontSquare: "c6",
+      frontPiece: "knight",
+      behindSquare: "d7",
+      behindPiece: "king",
+    });
+    expect(
+      buildVerifiedInsights(pin, analysis(), pinFacts, undefined, false).some((item) => item.id === "line-motif"),
+    ).toBe(true);
   });
 
   describe("attacks by cheaper pieces", () => {
     const insightsFor = (fen: string, from: string, to: string, verdict: AnalysisRecord["verdict"] = "Blunder") => {
-      const move = playedMove(fen, from, to); const result = analysis(verdict);
+      const move = playedMove(fen, from, to);
+      const result = analysis(verdict);
       const facts = buildCoachingFacts(move, result);
       return { facts, insights: buildVerifiedInsights(move, result, facts, undefined, false) };
     };
@@ -85,7 +123,9 @@ describe("verified coaching insights", () => {
       expect(facts.movedPieceDefenders).toContain("d1");
       expect(facts.movedPieceLoose).toBe(false);
       expect(facts.movedPieceOutranked).toEqual({ square: "e6", piece: "pawn" });
-      expect(insights.find((item) => item.id === "moved-piece-outranked")?.explanation).toContain("captured by the pawn on e6");
+      expect(insights.find((item) => item.id === "moved-piece-outranked")?.explanation).toContain(
+        "captured by the pawn on e6",
+      );
     });
 
     it("does not flag an even trade or a good move", () => {
@@ -108,7 +148,11 @@ describe("verified coaching insights", () => {
 
   describe("what the move allows", () => {
     const fen = "4k3/8/8/3p4/8/2N5/8/4K3 w - - 0 1";
-    const bad = (uci: string[], extra: Partial<AnalysisRecord> = {}): AnalysisRecord => ({ ...analysis("Blunder"), continuation: { id: "reply", uci, san: [] }, ...extra });
+    const bad = (uci: string[], extra: Partial<AnalysisRecord> = {}): AnalysisRecord => ({
+      ...analysis("Blunder"),
+      continuation: { id: "reply", uci, san: [] },
+      ...extra,
+    });
     const replyInsight = (result: AnalysisRecord, hintsVisible: boolean, position = fen, from = "c3", to = "e4") => {
       const move = playedMove(position, from, to);
       return buildVerifiedInsights(move, result, buildCoachingFacts(move, result), undefined, hintsVisible);
@@ -117,7 +161,9 @@ describe("verified coaching insights", () => {
     it("names the punishing capture and leads with it when hints are visible", () => {
       const [top] = replyInsight(bad(["d5e4", "e1e2"]), true);
       expect(top.id).toBe("opponent-reply");
-      expect(top.explanation).toBe("After Ne4, your opponent can answer dxe4, capturing your knight on e4. Your opponent comes out about 3 points of material ahead from here.");
+      expect(top.explanation).toBe(
+        "After Ne4, your opponent can answer dxe4, capturing your knight on e4. Your opponent comes out about 3 points of material ahead from here.",
+      );
     });
 
     it("does not count material while an exchange is unfinished", () => {
@@ -158,7 +204,9 @@ describe("verified coaching insights", () => {
     const facts = (fen: string, from: string, to: string) => buildCoachingFacts(playedMove(fen, from, to), analysis());
     const hasFork = (fen: string, from: string, to: string) => {
       const move = playedMove(fen, from, to);
-      return buildVerifiedInsights(move, analysis(), buildCoachingFacts(move, analysis()), undefined, false).some((item) => item.id === "piece-fork");
+      return buildVerifiedInsights(move, analysis(), buildCoachingFacts(move, analysis()), undefined, false).some(
+        (item) => item.id === "piece-fork",
+      );
     };
 
     it("does not call attacking two defended pawns a fork", () => {
@@ -167,7 +215,12 @@ describe("verified coaching insights", () => {
 
     it("counts the king, undefended pieces, and pieces worth more than the attacker", () => {
       expect(hasFork("8/4k3/8/8/3N4/8/1r6/4K3 w - - 0 1", "d4", "c6")).toBe(false);
-      expect(facts("r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5", "c7").forkTargets).toEqual(expect.arrayContaining([{ square: "e8", piece: "king" }, { square: "a8", piece: "rook" }]));
+      expect(facts("r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5", "c7").forkTargets).toEqual(
+        expect.arrayContaining([
+          { square: "e8", piece: "king" },
+          { square: "a8", piece: "rook" },
+        ]),
+      );
       expect(hasFork("r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5", "c7")).toBe(true);
     });
 
@@ -176,11 +229,23 @@ describe("verified coaching insights", () => {
     });
 
     it("recognizes a pin against a queen as well as a king", () => {
-      expect(facts("q3k3/1n6/8/8/8/8/6B1/4K3 w - - 0 1", "g2", "d5").lineMotifs).toContainEqual({ type: "pin", frontSquare: "b7", frontPiece: "knight", behindSquare: "a8", behindPiece: "queen" });
+      expect(facts("q3k3/1n6/8/8/8/8/6B1/4K3 w - - 0 1", "g2", "d5").lineMotifs).toContainEqual({
+        type: "pin",
+        frontSquare: "b7",
+        frontPiece: "knight",
+        behindSquare: "a8",
+        behindPiece: "queen",
+      });
     });
 
     it("recognizes a skewer through a more valuable piece", () => {
-      expect(facts("n7/1r2k3/8/8/8/8/6B1/4K3 w - - 0 1", "g2", "d5").lineMotifs).toContainEqual({ type: "skewer", frontSquare: "b7", frontPiece: "rook", behindSquare: "a8", behindPiece: "knight" });
+      expect(facts("n7/1r2k3/8/8/8/8/6B1/4K3 w - - 0 1", "g2", "d5").lineMotifs).toContainEqual({
+        type: "skewer",
+        frontSquare: "b7",
+        frontPiece: "rook",
+        behindSquare: "a8",
+        behindPiece: "knight",
+      });
     });
 
     it("does not call it a pin when the front piece can take the attacker", () => {
@@ -190,7 +255,13 @@ describe("verified coaching insights", () => {
 
     it("words an x-ray correctly", () => {
       const move = playedMove("6k1/p7/1p6/8/8/8/8/4K1B1 w - - 0 1", "g1", "e3");
-      const insight = buildVerifiedInsights(move, analysis(), buildCoachingFacts(move, analysis()), undefined, false).find((item) => item.id === "line-motif");
+      const insight = buildVerifiedInsights(
+        move,
+        analysis(),
+        buildCoachingFacts(move, analysis()),
+        undefined,
+        false,
+      ).find((item) => item.id === "line-motif");
       expect(insight?.explanation).toContain("an x-ray");
     });
   });
@@ -200,10 +271,16 @@ describe("verified coaching insights", () => {
     const result = analysis();
     const facts = buildCoachingFacts(move, result);
     const insights = buildVerifiedInsights(move, result, facts, undefined, false);
-    expect(validateCoachSelection({ moveId: "m", verdict: "Mistake", insightId: "invented" }, move, result, insights).join(" ")).toMatch(/verdict.*insightId/);
+    expect(
+      validateCoachSelection({ moveId: "m", verdict: "Mistake", insightId: "invented" }, move, result, insights).join(
+        " ",
+      ),
+    ).toMatch(/verdict.*insightId/);
     const selection = { moveId: "m", verdict: result.verdict, insightId: "central-pawn" } as const;
     expect(validateCoachSelection(selection, move, result, insights)).toEqual([]);
-    expect(renderCoachSelection(selection, result, insights).explanation).toBe(insights.find((item) => item.id === "central-pawn")?.explanation);
+    expect(renderCoachSelection(selection, result, insights).explanation).toBe(
+      insights.find((item) => item.id === "central-pawn")?.explanation,
+    );
     const injected = { ...selection, explanation: "Your queen disappeared." };
     expect(validateCoachSelection(injected, move, result, insights).join(" ")).toContain("unsupported fields");
     expect(() => renderCoachSelection({ ...selection, insightId: "invented" }, result, insights)).toThrow(/unverified/);
@@ -215,9 +292,13 @@ describe("verified coaching insights", () => {
     const facts = buildCoachingFacts(move, result);
     const unsupported = recognizeOpening(["e4", "e5", "Nf3", "Nc6", "Bc4"]);
     expect(unsupported?.guidanceAvailable).toBe(false);
-    expect(buildVerifiedInsights(move, result, facts, unsupported, false).some((item) => item.id === "opening-plan")).toBe(false);
+    expect(
+      buildVerifiedInsights(move, result, facts, unsupported, false).some((item) => item.id === "opening-plan"),
+    ).toBe(false);
     const london = recognizeOpening(["d4", "d5", "Nf3", "Nf6", "Bf4"]);
     expect(london?.guidanceAvailable).toBe(true);
-    expect(buildVerifiedInsights(move, result, facts, london, false).some((item) => item.id === "opening-plan")).toBe(true);
+    expect(buildVerifiedInsights(move, result, facts, london, false).some((item) => item.id === "opening-plan")).toBe(
+      true,
+    );
   });
 });

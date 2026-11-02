@@ -1,4 +1,14 @@
-import type { GameReviewSummary, GameSettings, GameState, GameSummary, PlayerPatterns, PracticePosition, PracticeResult, ProviderStatus, ServerEvent } from "../shared/types";
+import type {
+  GameReviewSummary,
+  GameSettings,
+  GameState,
+  GameSummary,
+  PlayerPatterns,
+  PracticePosition,
+  PracticeResult,
+  ProviderStatus,
+  ServerEvent,
+} from "../shared/types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -11,8 +21,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  bootstrap: () => request<{ games: GameSummary[]; provider: ProviderStatus; stockfish: { available: boolean } }>("/api/bootstrap"),
-  create: (settings: GameSettings) => request<GameState>("/api/games", { method: "POST", body: JSON.stringify(settings) }),
+  bootstrap: () =>
+    request<{ games: GameSummary[]; provider: ProviderStatus; stockfish: { available: boolean } }>("/api/bootstrap"),
+  create: (settings: GameSettings) =>
+    request<GameState>("/api/games", { method: "POST", body: JSON.stringify(settings) }),
   game: (id: string) => request<GameState>(`/api/games/${id}`),
   deleteGame: (id: string) => request<{ ok: true }>(`/api/games/${id}`, { method: "DELETE" }),
   deleteAllGames: () => request<{ deleted: number }>("/api/games", { method: "DELETE" }),
@@ -25,7 +37,10 @@ export const api = {
   resign: (id: string, color: "white" | "black") =>
     request<GameState>(`/api/games/${id}/resign`, { method: "POST", body: JSON.stringify({ color }) }),
   ask: (id: string, moveId: string, question: string) =>
-    request<{ answer: string }>(`/api/games/${id}/questions`, { method: "POST", body: JSON.stringify({ moveId, question }) }),
+    request<{ answer: string }>(`/api/games/${id}/questions`, {
+      method: "POST",
+      body: JSON.stringify({ moveId, question }),
+    }),
   patterns: () => request<PlayerPatterns[]>("/api/patterns"),
   practice: (id: string) => request<PracticePosition[]>(`/api/games/${id}/practice`),
   practiceAttempt: (id: string, moveId: string, attempt: { from: string; to: string; promotion?: string }) =>
@@ -41,10 +56,20 @@ export function connectEvents(onEvent: (event: ServerEvent) => void): () => void
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${protocol}://${location.host}/events`);
     socket.onmessage = (message) => {
-      try { onEvent(JSON.parse(message.data) as ServerEvent); } catch { /* ignore malformed event */ }
+      try {
+        onEvent(JSON.parse(message.data) as ServerEvent);
+      } catch {
+        /* ignore malformed event */
+      }
     };
-    socket.onclose = () => { if (!stopped) retry = window.setTimeout(connect, 1200); };
+    socket.onclose = () => {
+      if (!stopped) retry = window.setTimeout(connect, 1200);
+    };
   };
   connect();
-  return () => { stopped = true; if (retry) clearTimeout(retry); socket?.close(); };
+  return () => {
+    stopped = true;
+    if (retry) clearTimeout(retry);
+    socket?.close();
+  };
 }

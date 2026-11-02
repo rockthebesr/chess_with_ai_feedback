@@ -32,8 +32,10 @@ const broadcast = (event: ServerEvent) => {
 const games = new GameService(storage, coach, analysisEngine, botEngine, broadcast);
 
 const allowedOrigins = new Set([
-  `http://127.0.0.1:${port}`, `http://localhost:${port}`,
-  "http://127.0.0.1:5173", "http://localhost:5173",
+  `http://127.0.0.1:${port}`,
+  `http://localhost:${port}`,
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
 ]);
 
 function validateOrigin(req: IncomingMessage): boolean {
@@ -48,23 +50,41 @@ async function body(req: IncomingMessage): Promise<unknown> {
     if (raw.length > 64_000) throw new ServiceError(413, "Request is too large.");
   }
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { throw new ServiceError(400, "Request body must be valid JSON."); }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new ServiceError(400, "Request body must be valid JSON.");
+  }
 }
 
 function json(res: ServerResponse, status: number, value: unknown): void {
   const payload = JSON.stringify(value);
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": Buffer.byteLength(payload), "cache-control": "no-store" });
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": Buffer.byteLength(payload),
+    "cache-control": "no-store",
+  });
   res.end(payload);
 }
 
 const settingsSchema = z.object({
-  mode: z.enum(["bot", "local"]).optional(), whiteName: z.string().max(40).optional(), blackName: z.string().max(40).optional(),
-  humanColor: z.enum(["white", "black"]).optional(), difficulty: z.enum(["beginner", "easy", "medium", "strong"]).optional(),
-  practice: z.enum(["normal", "guided"]).optional(), autoFlip: z.boolean().optional(), hintsVisible: z.boolean().optional(),
+  mode: z.enum(["bot", "local"]).optional(),
+  whiteName: z.string().max(40).optional(),
+  blackName: z.string().max(40).optional(),
+  humanColor: z.enum(["white", "black"]).optional(),
+  difficulty: z.enum(["beginner", "easy", "medium", "strong"]).optional(),
+  practice: z.enum(["normal", "guided"]).optional(),
+  autoFlip: z.boolean().optional(),
+  hintsVisible: z.boolean().optional(),
   boardTheme: z.enum(["forest", "walnut", "slate", "contrast"]).optional(),
   pieceStyle: z.enum(["classic", "solid", "letters"]).optional(),
 });
-const moveSchema = z.object({ from: z.string().regex(/^[a-h][1-8]$/), to: z.string().regex(/^[a-h][1-8]$/), promotion: z.enum(["q", "r", "b", "n"]).optional(), expectedRevision: z.number().int().nonnegative() });
+const moveSchema = z.object({
+  from: z.string().regex(/^[a-h][1-8]$/),
+  to: z.string().regex(/^[a-h][1-8]$/),
+  promotion: z.enum(["q", "r", "b", "n"]).optional(),
+  expectedRevision: z.number().int().nonnegative(),
+});
 
 const server = createServer(async (req, res) => {
   try {
@@ -72,10 +92,19 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
     const parts = url.pathname.split("/").filter(Boolean);
     if (req.method === "GET" && url.pathname === "/api/health") {
-      return json(res, 200, { ok: true, stockfish: Boolean(stockfishPath), coaching: games.providerStatus(), dataPath: storage.databasePath });
+      return json(res, 200, {
+        ok: true,
+        stockfish: Boolean(stockfishPath),
+        coaching: games.providerStatus(),
+        dataPath: storage.databasePath,
+      });
     }
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
-      return json(res, 200, { games: games.list(), provider: games.providerStatus(), stockfish: { available: Boolean(stockfishPath), path: stockfishPath ? "configured" : undefined } });
+      return json(res, 200, {
+        games: games.list(),
+        provider: games.providerStatus(),
+        stockfish: { available: Boolean(stockfishPath), path: stockfishPath ? "configured" : undefined },
+      });
     }
     if (req.method === "GET" && url.pathname === "/api/patterns") return json(res, 200, games.patterns());
     if (req.method === "POST" && url.pathname === "/api/games") {
@@ -87,12 +116,16 @@ const server = createServer(async (req, res) => {
     if (parts[0] === "api" && parts[1] === "games" && parts[2]) {
       const gameId = parts[2];
       if (req.method === "GET" && parts.length === 3) {
-        const game = games.get(gameId); if (!game) throw new ServiceError(404, "Game not found."); return json(res, 200, game);
+        const game = games.get(gameId);
+        if (!game) throw new ServiceError(404, "Game not found.");
+        return json(res, 200, game);
       }
       if (req.method === "DELETE" && parts.length === 3) {
-        await games.delete(gameId); return json(res, 200, { ok: true });
+        await games.delete(gameId);
+        return json(res, 200, { ok: true });
       }
-      if (req.method === "POST" && parts[3] === "moves") return json(res, 200, await games.move(gameId, moveSchema.parse(await body(req))));
+      if (req.method === "POST" && parts[3] === "moves")
+        return json(res, 200, await games.move(gameId, moveSchema.parse(await body(req))));
       if (req.method === "POST" && parts[3] === "continue") {
         const input = z.object({ expectedRevision: z.number().int().nonnegative() }).parse(await body(req));
         return json(res, 200, await games.continue(gameId, input.expectedRevision));
@@ -105,36 +138,62 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === "POST" && parts[3] === "draw") return json(res, 200, games.agreeDraw(gameId));
       if (req.method === "POST" && parts[3] === "questions") {
-        const input = z.object({ moveId: z.string().uuid(), question: z.string().min(1).max(500) }).parse(await body(req));
+        const input = z
+          .object({ moveId: z.string().uuid(), question: z.string().min(1).max(500) })
+          .parse(await body(req));
         return json(res, 200, { answer: await games.ask(gameId, input.moveId, input.question) });
       }
       if (req.method === "POST" && parts[3] === "review") {
-        const input = z.object({ throughPly: z.number().int().nonnegative(), moves: z.array(z.object({ from: z.string(), to: z.string(), promotion: z.string().optional() })).max(20) }).parse(await body(req));
+        const input = z
+          .object({
+            throughPly: z.number().int().nonnegative(),
+            moves: z.array(z.object({ from: z.string(), to: z.string(), promotion: z.string().optional() })).max(20),
+          })
+          .parse(await body(req));
         return json(res, 200, games.review(gameId, input.throughPly, input.moves));
       }
-      if (req.method === "GET" && parts[3] === "practice" && parts.length === 4) return json(res, 200, games.practicePositions(gameId));
+      if (req.method === "GET" && parts[3] === "practice" && parts.length === 4)
+        return json(res, 200, games.practicePositions(gameId));
       if (req.method === "POST" && parts[3] === "practice" && parts[4]) {
-        const { expectedRevision: _unused, ...attempt } = moveSchema.extend({ expectedRevision: z.number().optional() }).parse(await body(req));
+        const { expectedRevision: _unused, ...attempt } = moveSchema
+          .extend({ expectedRevision: z.number().optional() })
+          .parse(await body(req));
         return json(res, 200, await games.practiceAttempt(gameId, parts[4], attempt));
       }
       if (req.method === "GET" && parts[3] === "summary") return json(res, 200, games.postgameSummary(gameId));
       if (req.method === "GET" && parts[3] === "pgn") {
-        const game = games.get(gameId); if (!game) throw new ServiceError(404, "Game not found.");
+        const game = games.get(gameId);
+        if (!game) throw new ServiceError(404, "Game not found.");
         const headers = `[Event "Local Chess Coach"]\n[White "${game.settings.whiteName.replaceAll('"', "'")}"]\n[Black "${game.settings.blackName.replaceAll('"', "'")}"]\n[Result "${game.result}"]\n\n`;
-        const movetext = game.pgn.replace(/^\[[\s\S]*?\]\s*/gm, "").trim()
-          .replace(/\s+(?:1-0|0-1|1\/2-1\/2|\*)\s*$/, "").trim();
+        const movetext = game.pgn
+          .replace(/^\[[\s\S]*?\]\s*/gm, "")
+          .trim()
+          .replace(/\s+(?:1-0|0-1|1\/2-1\/2|\*)\s*$/, "")
+          .trim();
         const payload = `${headers}${movetext}${movetext ? " " : ""}${game.result}\n`;
-        res.writeHead(200, { "content-type": "application/x-chess-pgn; charset=utf-8", "content-disposition": `attachment; filename="game-${game.id.slice(0, 8)}.pgn"` });
+        res.writeHead(200, {
+          "content-type": "application/x-chess-pgn; charset=utf-8",
+          "content-disposition": `attachment; filename="game-${game.id.slice(0, 8)}.pgn"`,
+        });
         return res.end(payload);
       }
     }
     if (req.method === "GET" && process.env.NODE_ENV === "production" && existsSync(dist)) {
       const requested = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
       let file = path.resolve(dist, requested);
-      if (!file.startsWith(`${dist}${path.sep}`) || !existsSync(file) || statSync(file).isDirectory()) file = path.join(dist, "index.html");
+      if (!file.startsWith(`${dist}${path.sep}`) || !existsSync(file) || statSync(file).isDirectory())
+        file = path.join(dist, "index.html");
       const ext = path.extname(file);
-      const type = ext === ".html" ? "text/html" : ext === ".js" ? "text/javascript" : ext === ".css" ? "text/css" : "application/octet-stream";
-      res.writeHead(200, { "content-type": `${type}; charset=utf-8` }); return createReadStream(file).pipe(res);
+      const type =
+        ext === ".html"
+          ? "text/html"
+          : ext === ".js"
+            ? "text/javascript"
+            : ext === ".css"
+              ? "text/css"
+              : "application/octet-stream";
+      res.writeHead(200, { "content-type": `${type}; charset=utf-8` });
+      return createReadStream(file).pipe(res);
     }
     json(res, 404, { error: "Not found." });
   } catch (error) {
@@ -149,7 +208,10 @@ server.on("upgrade", (req, socket, head) => {
   if (req.url !== "/events" || !validateOrigin(req)) return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
 });
-wss.on("connection", (socket) => { sockets.add(socket); socket.on("close", () => sockets.delete(socket)); });
+wss.on("connection", (socket) => {
+  sockets.add(socket);
+  socket.on("close", () => sockets.delete(socket));
+});
 
 server.listen(port, host, () => {
   console.log(`Local Chess Coach: http://${host}:${port}`);
@@ -161,7 +223,10 @@ let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  coach.close(); analysisEngine?.stop(); botEngine?.stop(); storage.close();
+  coach.close();
+  analysisEngine?.stop();
+  botEngine?.stop();
+  storage.close();
   for (const socket of sockets) socket.close();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 3000).unref();

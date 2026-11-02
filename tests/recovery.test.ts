@@ -8,18 +8,29 @@ import { Storage } from "../server/storage.js";
 import type { ProviderStatus, ServerEvent } from "../shared/types.js";
 
 const dirs: string[] = [];
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 function offlineCoach(overrides: Partial<CoachProvider> = {}): CoachProvider {
   return {
-    status: () => ({ available: false, error: "offline test" }), initialize: async () => ({ available: false }),
-    coach: async () => { throw new Error("offline"); }, followUp: async () => { throw new Error("offline"); },
-    cancel: async () => undefined, close: () => undefined, ...overrides,
+    status: () => ({ available: false, error: "offline test" }),
+    initialize: async () => ({ available: false }),
+    coach: async () => {
+      throw new Error("offline");
+    },
+    followUp: async () => {
+      throw new Error("offline");
+    },
+    cancel: async () => undefined,
+    close: () => undefined,
+    ...overrides,
   };
 }
 
 function tempDir(): string {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+  const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+  dirs.push(dir);
   return dir;
 }
 
@@ -83,7 +94,8 @@ describe("interrupted job recovery", () => {
     const moveId = moved.moves[0].id;
     await service.idle();
     const finished = structuredClone(storage.loadGame(game.id)!);
-    finished.status = "complete"; finished.result = "1-0";
+    finished.status = "complete";
+    finished.result = "1-0";
     finished.analysis[moveId].status = "pending";
     finished.coaching[moveId] = { moveId, status: "queued" };
     storage.saveGame(finished);
@@ -105,7 +117,10 @@ describe("coach availability during play", () => {
     const events: ServerEvent[] = [];
     const coach = offlineCoach({
       status: () => status,
-      refresh: async () => { status = { available: true, authMode: "local", model: "gemma3:4b" }; return status; },
+      refresh: async () => {
+        status = { available: true, authMode: "local", model: "gemma3:4b" };
+        return status;
+      },
       coach: async (_game, move) => ({ ...output, moveId: move.id }),
     });
     const storage = new Storage(tempDir());
@@ -121,14 +136,21 @@ describe("coach availability during play", () => {
   it("credits the provider that actually answered", async () => {
     const coach = offlineCoach({
       status: () => ({ available: true, authMode: "local", model: "gemma3:4b" }),
-      coach: async (_game, move) => ({ ...output, moveId: move.id, source: { available: true, authMode: "chatgpt", model: "gpt-5.6-luna" } }),
+      coach: async (_game, move) => ({
+        ...output,
+        moveId: move.id,
+        source: { available: true, authMode: "chatgpt", model: "gpt-5.6-luna" },
+      }),
     });
     const storage = new Storage(tempDir());
     const service = new GameService(storage, coach, undefined, undefined, () => undefined);
     const game = service.create({ mode: "local" });
     const moved = await service.move(game.id, { from: "e2", to: "e4", expectedRevision: 0 });
     await service.idle();
-    expect(service.get(game.id)?.coaching[moved.moves[0].id]).toMatchObject({ provider: "Codex App Server", model: "gpt-5.6-luna" });
+    expect(service.get(game.id)?.coaching[moved.moves[0].id]).toMatchObject({
+      provider: "Codex App Server",
+      model: "gpt-5.6-luna",
+    });
     storage.close();
   });
 });

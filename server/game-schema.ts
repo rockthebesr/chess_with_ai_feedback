@@ -11,22 +11,47 @@ const verdict = z.enum(["Good move", "Inaccuracy", "Mistake", "Blunder", "Analys
 const color = z.enum(["white", "black"]);
 
 const moveRecord = z.looseObject({
-  id: z.string(), gameId: z.string(), branchId: z.string(), revision: z.number(), ply: z.number(), mover: color,
-  beforeFen: z.string(), afterFen: z.string(), san: z.string(), uci: z.string(), createdAt: z.string(),
+  id: z.string(),
+  gameId: z.string(),
+  branchId: z.string(),
+  revision: z.number(),
+  ply: z.number(),
+  mover: color,
+  beforeFen: z.string(),
+  afterFen: z.string(),
+  san: z.string(),
+  uci: z.string(),
+  createdAt: z.string(),
 });
 const analysisRecord = z.looseObject({
-  moveId: z.string(), status: z.enum(["pending", "complete", "unavailable", "cancelled"]), verdict,
-  budgetMs: z.number(), engine: z.string(), alternatives: z.array(z.looseObject({ id: z.string(), uci: z.array(z.string()), san: z.array(z.string()) })),
+  moveId: z.string(),
+  status: z.enum(["pending", "complete", "unavailable", "cancelled"]),
+  verdict,
+  budgetMs: z.number(),
+  engine: z.string(),
+  alternatives: z.array(z.looseObject({ id: z.string(), uci: z.array(z.string()), san: z.array(z.string()) })),
 });
 const coachingRecord = z.looseObject({
-  moveId: z.string(), status: z.enum(["queued", "streaming", "complete", "verified-fallback", "unavailable", "cancelled", "skipped"]),
+  moveId: z.string(),
+  status: z.enum(["queued", "streaming", "complete", "verified-fallback", "unavailable", "cancelled", "skipped"]),
 });
 const gameState = z.looseObject({
-  id: z.string(), branchId: z.string(), revision: z.number(), settings: z.looseObject({}),
-  fen: z.string(), turn: color, status: z.enum(["active", "complete"]), result: z.string(), paused: z.boolean(), pgn: z.string(),
-  moves: z.array(moveRecord), legalMoves: z.array(z.looseObject({ from: z.string(), to: z.string() })),
-  analysis: z.record(z.string(), analysisRecord), coaching: z.record(z.string(), coachingRecord),
-  createdAt: z.string(), updatedAt: z.string(),
+  id: z.string(),
+  branchId: z.string(),
+  revision: z.number(),
+  settings: z.looseObject({}),
+  fen: z.string(),
+  turn: color,
+  status: z.enum(["active", "complete"]),
+  result: z.string(),
+  paused: z.boolean(),
+  pgn: z.string(),
+  moves: z.array(moveRecord),
+  legalMoves: z.array(z.looseObject({ from: z.string(), to: z.string() })),
+  analysis: z.record(z.string(), analysisRecord),
+  coaching: z.record(z.string(), coachingRecord),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 /** Parses a stored game, upgrading older versions. Throws rather than letting a damaged or newer game into the app. */

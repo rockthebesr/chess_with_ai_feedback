@@ -24,7 +24,12 @@ export async function findStockfish(): Promise<string | undefined> {
     "/usr/bin/stockfish",
   ].filter((value): value is string => Boolean(value));
   for (const path of candidates) {
-    try { await access(path, constants.X_OK); return path; } catch { /* try next */ }
+    try {
+      await access(path, constants.X_OK);
+      return path;
+    } catch {
+      /* try next */
+    }
   }
   return undefined;
 }
@@ -37,7 +42,10 @@ export class UciEngine {
   private ready = false;
   version = "Stockfish";
 
-  constructor(private readonly executable: string, private readonly label: string) {}
+  constructor(
+    private readonly executable: string,
+    private readonly label: string,
+  ) {}
 
   async start(): Promise<void> {
     if (this.ready) return;
@@ -47,7 +55,9 @@ export class UciEngine {
       if (line.startsWith("id name ")) this.version = line.slice(8).trim();
       for (const listener of this.listeners) listener(line);
     });
-    this.proc.on("exit", () => { this.ready = false; });
+    this.proc.on("exit", () => {
+      this.ready = false;
+    });
     this.send("uci");
     await this.waitFor("uciok", 5000);
     this.send("setoption name Threads value 1");
@@ -64,9 +74,20 @@ export class UciEngine {
 
   private waitFor(expected: string, timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { cleanup(); reject(new Error(`Timed out waiting for ${expected}`)); }, timeoutMs);
-      const onLine = (line: string) => { if (line === expected || line.startsWith(`${expected} `)) { cleanup(); resolve(); } };
-      const cleanup = () => { clearTimeout(timer); this.listeners.delete(onLine); };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Timed out waiting for ${expected}`));
+      }, timeoutMs);
+      const onLine = (line: string) => {
+        if (line === expected || line.startsWith(`${expected} `)) {
+          cleanup();
+          resolve();
+        }
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.listeners.delete(onLine);
+      };
       this.listeners.add(onLine);
     });
   }
@@ -85,7 +106,11 @@ export class UciEngine {
       if (skill !== undefined) this.send(`setoption name Skill Level value ${Math.max(0, Math.min(20, skill))}`);
       const found = new Map<number, UciLine>();
       return await new Promise<UciResult>((resolve, reject) => {
-        const timeout = setTimeout(() => { this.send("stop"); cleanup(); reject(new Error("Stockfish analysis timed out")); }, movetimeMs + 5000);
+        const timeout = setTimeout(() => {
+          this.send("stop");
+          cleanup();
+          reject(new Error("Stockfish analysis timed out"));
+        }, movetimeMs + 5000);
         const onLine = (line: string) => {
           if (line.startsWith("info ") && line.includes(" pv ") && line.includes(" score ")) {
             const parsed = parseInfo(line);
@@ -97,7 +122,10 @@ export class UciEngine {
             resolve({ bestMove, lines: [...found.values()].sort((a, b) => a.multipv - b.multipv) });
           }
         };
-        const cleanup = () => { clearTimeout(timeout); this.listeners.delete(onLine); };
+        const cleanup = () => {
+          clearTimeout(timeout);
+          this.listeners.delete(onLine);
+        };
         this.listeners.add(onLine);
         this.send(`position fen ${fen}`);
         this.send(`go movetime ${Math.max(50, movetimeMs)}`);
@@ -106,7 +134,11 @@ export class UciEngine {
   }
 
   stop(): void {
-    try { this.send("quit"); } catch { /* already gone */ }
+    try {
+      this.send("quit");
+    } catch {
+      /* already gone */
+    }
     this.lines?.close();
     this.proc?.kill();
     this.ready = false;

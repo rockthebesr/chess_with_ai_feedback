@@ -147,7 +147,14 @@ export interface PracticeResult {
   explanation: string;
 }
 
-export type MistakePattern = "allowed-mate" | "missed-mate" | "left-undefended" | "attacked-by-cheaper" | "allowed-capture" | "missed-capture" | "other";
+export type MistakePattern =
+  | "allowed-mate"
+  | "missed-mate"
+  | "left-undefended"
+  | "attacked-by-cheaper"
+  | "allowed-capture"
+  | "missed-capture"
+  | "other";
 
 export interface PlayerPatterns {
   name: string;

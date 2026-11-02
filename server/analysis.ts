@@ -15,14 +15,22 @@ function lineToCandidate(fen: string, line: UciLine, id: string): CandidateLine 
       const applied = chess.move({ from, to, promotion });
       san.push(applied.san);
       uci.push(move);
-    } catch { break; }
+    } catch {
+      break;
+    }
   }
   const oriented = whiteScore({ cp: line.cp, mate: line.mate }, new Chess(fen).turn());
   return { id, scoreCp: oriented.cp, mate: oriented.mate, uci, san };
 }
 
-export async function analyzeMove(engine: UciEngine | undefined, move: MoveRecord, legalMoveCount: number, budgetMs = 650): Promise<AnalysisRecord> {
-  if (!engine) return fallbackAnalysis(move, "Stockfish was not found; showing deterministic rules-based feedback.", budgetMs);
+export async function analyzeMove(
+  engine: UciEngine | undefined,
+  move: MoveRecord,
+  legalMoveCount: number,
+  budgetMs = 650,
+): Promise<AnalysisRecord> {
+  if (!engine)
+    return fallbackAnalysis(move, "Stockfish was not found; showing deterministic rules-based feedback.", budgetMs);
   try {
     // Bot play uses a different UCI process; this analysis worker can spend its full budget.
     const beforeRaw = await engine.analyze(move.beforeFen, budgetMs, 3);
@@ -31,7 +39,8 @@ export async function analyzeMove(engine: UciEngine | undefined, move: MoveRecor
     const finished = position.isCheckmate() ? { mate: 0 } : position.isStalemate() ? { cp: 0 } : undefined;
     const afterLine = finished ? undefined : (await engine.analyze(move.afterFen, budgetMs, 1)).lines[0];
     const beforeLine = beforeRaw.lines[0];
-    if (!beforeLine || (!finished && !afterLine)) return fallbackAnalysis(move, "The engine returned no comparable score.", budgetMs);
+    if (!beforeLine || (!finished && !afterLine))
+      return fallbackAnalysis(move, "The engine returned no comparable score.", budgetMs);
     const before = whiteScore({ cp: beforeLine.cp, mate: beforeLine.mate }, new Chess(move.beforeFen).turn());
     const after = finished ?? whiteScore({ cp: afterLine!.cp, mate: afterLine!.mate }, position.turn());
     const judged = verdictFor(before, after, move.mover, legalMoveCount === 1);
@@ -60,7 +69,8 @@ function material(fen: string): number {
   const values: Record<string, number> = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 };
   const chess = new Chess(fen);
   let score = 0;
-  for (const row of chess.board()) for (const piece of row) if (piece) score += values[piece.type] * (piece.color === "w" ? 1 : -1);
+  for (const row of chess.board())
+    for (const piece of row) if (piece) score += values[piece.type] * (piece.color === "w" ? 1 : -1);
   return score;
 }
 
@@ -90,18 +100,29 @@ export function chooseFallbackBotMove(chess: Chess): { from: string; to: string;
   return { from: move.from, to: move.to, promotion: move.promotion };
 }
 
-export async function chooseBotMove(engine: UciEngine | undefined, fen: string, difficulty: string): Promise<{ from: string; to: string; promotion?: string }> {
+export async function chooseBotMove(
+  engine: UciEngine | undefined,
+  fen: string,
+  difficulty: string,
+): Promise<{ from: string; to: string; promotion?: string }> {
   const chess = new Chess(fen);
   if (!engine) return chooseFallbackBotMove(chess);
   const settings: Record<string, { ms: number; skill: number }> = {
-    beginner: { ms: 100, skill: 0 }, easy: { ms: 180, skill: 5 }, medium: { ms: 350, skill: 10 }, strong: { ms: 700, skill: 16 },
+    beginner: { ms: 100, skill: 0 },
+    easy: { ms: 180, skill: 5 },
+    medium: { ms: 350, skill: 10 },
+    strong: { ms: 700, skill: 16 },
   };
   try {
     const selected = settings[difficulty] ?? settings.easy;
     const result = await engine.analyze(fen, selected.ms, 1, selected.skill);
     if (!result.bestMove || result.bestMove === "(none)") return chooseFallbackBotMove(chess);
     return { from: result.bestMove.slice(0, 2), to: result.bestMove.slice(2, 4), promotion: result.bestMove[4] };
-  } catch { return chooseFallbackBotMove(chess); }
+  } catch {
+    return chooseFallbackBotMove(chess);
+  }
 }
 
-export function playerForTurn(turn: "w" | "b"): Color { return turn === "w" ? "white" : "black"; }
+export function playerForTurn(turn: "w" | "b"): Color {
+  return turn === "w" ? "white" : "black";
+}

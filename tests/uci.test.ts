@@ -4,7 +4,11 @@ import { parseInfo } from "../server/uci.js";
 describe("UCI parsing", () => {
   it("parses centipawn multi-PV output", () => {
     expect(parseInfo("info depth 16 multipv 2 score cp -37 nodes 1000 pv e2e4 e7e5")).toEqual({
-      multipv: 2, depth: 16, cp: -37, mate: undefined, moves: ["e2e4", "e7e5"],
+      multipv: 2,
+      depth: 16,
+      cp: -37,
+      mate: undefined,
+      moves: ["e2e4", "e7e5"],
     });
   });
 

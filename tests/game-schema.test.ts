@@ -9,16 +9,27 @@ import { GAME_STATE_VERSION, parseGameState } from "../server/game-schema.js";
 import { Storage } from "../server/storage.js";
 
 const dirs: string[] = [];
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); vi.restoreAllMocks(); });
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  vi.restoreAllMocks();
+});
 
 const coach: CoachProvider = {
-  status: () => ({ available: false }), initialize: async () => ({ available: false }),
-  coach: async () => { throw new Error("offline"); }, followUp: async () => { throw new Error("offline"); },
-  cancel: async () => undefined, close: () => undefined,
+  status: () => ({ available: false }),
+  initialize: async () => ({ available: false }),
+  coach: async () => {
+    throw new Error("offline");
+  },
+  followUp: async () => {
+    throw new Error("offline");
+  },
+  cancel: async () => undefined,
+  close: () => undefined,
 };
 
 function setup() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-")); dirs.push(dir);
+  const dir = mkdtempSync(path.join(os.tmpdir(), "chess-coach-test-"));
+  dirs.push(dir);
   const storage = new Storage(dir);
   return { dir, storage, service: new GameService(storage, coach, undefined, undefined, () => undefined) };
 }
@@ -58,8 +69,14 @@ describe("saved game validation", () => {
     const v1 = storedJson(dir, game.id);
     const steps: number[] = [];
     const table = {
-      1: (state: Record<string, unknown>) => { steps.push(1); return { ...state, result: "migrated" }; },
-      2: (state: Record<string, unknown>) => { steps.push(2); return state; },
+      1: (state: Record<string, unknown>) => {
+        steps.push(1);
+        return { ...state, result: "migrated" };
+      },
+      2: (state: Record<string, unknown>) => {
+        steps.push(2);
+        return state;
+      },
     };
     const parsed = parseGameState(v1, table, 3);
     expect(steps).toEqual([1, 2]);
