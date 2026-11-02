@@ -1,4 +1,4 @@
-import type { GameReviewSummary, GameSettings, GameState, GameSummary, ProviderStatus, ServerEvent } from "../shared/types";
+import type { GameReviewSummary, GameSettings, GameState, GameSummary, PracticePosition, PracticeResult, ProviderStatus, ServerEvent } from "../shared/types";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -26,6 +26,9 @@ export const api = {
     request<GameState>(`/api/games/${id}/resign`, { method: "POST", body: JSON.stringify({ color }) }),
   ask: (id: string, moveId: string, question: string) =>
     request<{ answer: string }>(`/api/games/${id}/questions`, { method: "POST", body: JSON.stringify({ moveId, question }) }),
+  practice: (id: string) => request<PracticePosition[]>(`/api/games/${id}/practice`),
+  practiceAttempt: (id: string, moveId: string, attempt: { from: string; to: string; promotion?: string }) =>
+    request<PracticeResult>(`/api/games/${id}/practice/${moveId}`, { method: "POST", body: JSON.stringify(attempt) }),
   summary: (id: string) => request<GameReviewSummary>(`/api/games/${id}/summary`),
 };
 

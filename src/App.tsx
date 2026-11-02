@@ -4,6 +4,7 @@ import type { CandidateLine, GameReviewSummary, GameSettings, GameState, GameSum
 import { api, connectEvents } from "./api";
 import { ChessBoard } from "./ChessBoard";
 import { GameReview, moveLabel } from "./GameReview";
+import { PracticePanel, type PracticeState } from "./Practice";
 
 const initialSettings: GameSettings = {
   mode: "bot", whiteName: "Rock", blackName: "Christine", humanColor: "white",
@@ -137,9 +138,10 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
   const [manualOrientation, setManualOrientation] = useState<"white" | "black">(initialOrientation);
   const [review, setReview] = useState<{ fen: string; legalMoves: GameState["legalMoves"]; label: string; ply?: number; lastMove?: { from: string; to: string } }>();
   const [summary, setSummary] = useState<GameReviewSummary>();
+  const [practice, setPractice] = useState<PracticeState>();
   const [boardTheme, setBoardTheme] = useState(() => appearanceFor(game).boardTheme);
   const [pieceStyle, setPieceStyle] = useState(() => appearanceFor(game).pieceStyle);
-  const orientation = manualOrientation;
+  const orientation = practice ? practice.positions[practice.index].mover : manualOrientation;
   const last = game.moves.at(-1);
   const coachedMoves = game.settings.mode === "bot" ? game.moves.filter((move) => move.mover === game.settings.humanColor) : game.moves;
   const moveAllowed = game.status === "active" && !game.paused && !(game.settings.mode === "bot" && game.turn !== game.settings.humanColor);
@@ -151,6 +153,32 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
     const chess = new Chess(review.fen);
     try { const moved = chess.move({ from, to, promotion }); setReview({ fen: chess.fen(), legalMoves: legalFor(chess), label: `${review.label} · ${moved.san}`, ply: review.ply, lastMove: { from: moved.from, to: moved.to } }); } catch { /* board already limits moves */ }
   };
+  const startPractice = async () => {
+    setError(undefined);
+    try {
+      const positions = await api.practice(game.id);
+      if (!positions.length) return;
+      setReview(undefined);
+      setPractice({ positions, index: 0, fen: positions[0].fen, checking: false, revealed: false, solvedIds: [] });
+    } catch (e) { setError(e instanceof Error ? e.message : "Practice could not start."); }
+  };
+  const showPractice = (index: number) => setPractice((current) => current && { ...current, index, fen: current.positions[index].fen, checking: false, result: undefined, revealed: false });
+  const practiceMove = async (from: string, to: string, promotion?: string) => {
+    if (!practice) return;
+    const position = practice.positions[practice.index];
+    const board = new Chess(position.fen);
+    try { board.move({ from, to, promotion }); } catch { return; }
+    setError(undefined);
+    setPractice({ ...practice, fen: board.fen(), checking: true, result: undefined });
+    try {
+      const result = await api.practiceAttempt(game.id, position.moveId, { from, to, promotion });
+      setPractice((current) => current && { ...current, checking: false, result, solvedIds: result.solved && !current.solvedIds.includes(position.moveId) ? [...current.solvedIds, position.moveId] : current.solvedIds });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That move could not be checked.");
+      setPractice((current) => current && { ...current, fen: position.fen, checking: false });
+    }
+  };
+  useEffect(() => { setPractice(undefined); }, [game.id, game.branchId]);
   const showPly = (ply: number) => {
     const target = Math.max(0, Math.min(game.moves.length, ply));
     const move = game.moves[target - 1];
@@ -158,7 +186,7 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
     setReview({ fen, legalMoves: legalFor(new Chess(fen)), label: move ? stepLabel(game, move) : "Starting position", ply: target, lastMove: move && { from: move.uci.slice(0, 2), to: move.uci.slice(2, 4) } });
   };
   useEffect(() => {
-    if (game.status !== "complete") return;
+    if (game.status !== "complete" || practice) return;
     const onKey = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement | null)?.closest("input, select, textarea")) return;
       const current = review?.ply ?? game.moves.length;
@@ -169,7 +197,7 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [game.status, game.moves, review?.ply]);
+  }, [game.status, game.moves, review?.ply, practice]);
   // Refetch as verdicts land: the last live analysis and the post-game recheck both arrive after the game ends.
   const verdicts = game.moves.map((move) => game.analysis[move.id]?.verdict).join();
   useEffect(() => { if (game.status === "complete") void api.summary(game.id).then(setSummary); }, [game.status, game.id, verdicts]);
@@ -182,7 +210,9 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
     <div className="play-layout">
       <section className="board-column">
         <Player name={orientation === "white" ? game.settings.blackName : game.settings.whiteName} color={orientation === "white" ? "black" : "white"} active={game.turn === (orientation === "white" ? "black" : "white") && game.status === "active"} />
-        <ChessBoard fen={review?.fen ?? game.fen} orientation={orientation} legalMoves={review?.legalMoves ?? game.legalMoves} lastMove={review ? review.lastMove : last ? { from: last.uci.slice(0, 2), to: last.uci.slice(2, 4) } : undefined} disabled={review ? false : !moveAllowed} theme={boardTheme} pieceStyle={pieceStyle} onMove={review ? reviewMove : makeMove} />
+        {practice
+          ? <ChessBoard fen={practice.fen} orientation={orientation} legalMoves={legalFor(new Chess(practice.fen))} disabled={practice.checking || Boolean(practice.result)} theme={boardTheme} pieceStyle={pieceStyle} onMove={(from, to, promotion) => void practiceMove(from, to, promotion)} />
+          : <ChessBoard fen={review?.fen ?? game.fen} orientation={orientation} legalMoves={review?.legalMoves ?? game.legalMoves} lastMove={review ? review.lastMove : last ? { from: last.uci.slice(0, 2), to: last.uci.slice(2, 4) } : undefined} disabled={review ? false : !moveAllowed} theme={boardTheme} pieceStyle={pieceStyle} onMove={review ? reviewMove : makeMove} />}
         <Player name={orientation === "white" ? game.settings.whiteName : game.settings.blackName} color={orientation} active={game.turn === orientation && game.status === "active"} />
         {review && <div className="review-banner"><span><strong>Review board</strong> — {review.label}</span><button onClick={() => setReview(undefined)}>Return to game</button></div>}
         <div className="controls"><button onClick={() => setManualOrientation((value) => value === "white" ? "black" : "white")}>↻ Flip</button><button onClick={() => void update(api.action(game.id, "undo"))} disabled={!game.moves.length}>↶ Take back</button><button onClick={() => { if (confirm("Restart this game from the beginning?")) void update(api.action(game.id, "restart")); }}>Restart</button>{game.settings.mode === "local" && <button onClick={() => void update(api.action(game.id, "draw"))} disabled={game.status !== "active"}>Agree draw</button>}<details className="appearance-menu"><summary>Appearance</summary><div><label>Board<select aria-label="Board colors" value={boardTheme} onChange={(e) => { const value = e.target.value as GameSettings["boardTheme"]; setBoardTheme(value); rememberAppearance(value, pieceStyle); }}><option value="forest">Forest</option><option value="walnut">Walnut</option><option value="slate">Slate</option><option value="contrast">High contrast</option></select></label><label>Pieces<select aria-label="Piece style" value={pieceStyle} onChange={(e) => { const value = e.target.value as GameSettings["pieceStyle"]; setPieceStyle(value); rememberAppearance(boardTheme, value); }}><option value="classic">Classic</option><option value="solid">Solid</option><option value="letters">Letters</option></select></label></div></details><button className="danger" onClick={() => { if (confirm("Resign this game?")) void update(api.resign(game.id, game.turn)); }} disabled={game.status !== "active"}>Resign</button></div>
@@ -191,7 +221,8 @@ function GameRoom({ game, provider, stockfish, error, setError, onGame, onHome }
         <section className="turn-card"><div><span className="eyebrow">{game.status === "active" ? "Current turn" : "Game over"}</span><h2>{game.status === "active" ? `${game.turn === "white" ? game.settings.whiteName : game.settings.blackName} to move` : `${game.result} · ${game.resultReason ?? "finished"}`}</h2></div><div className={`mode-pill ${game.settings.practice}`}>{game.settings.practice === "guided" ? "Guided practice" : "Normal play"}</div></section>
         {game.paused && <section className="pause-card"><span>Lesson pause</span><p>You can read the latest feedback now, or continue even if coaching is still arriving.</p><button className="primary" onClick={() => void update(api.continue(game.id, game.revision))}>Continue game →</button></section>}
         {game.opening ? <OpeningCard game={game} /> : game.moves.length > 1 && <section className="unknown-opening"><small>OPENING</small><strong>Outside the starter catalog</strong><p>The moves are legal, but this position has no supported name in the local opening set.</p></section>}
-        {game.status === "complete" && <Postgame game={game} summary={summary} ply={review?.ply} onSelectPly={showPly} onReview={(fen, line) => setReview(reviewFromLine(fen, line))} />}
+        {practice && <PracticePanel state={practice} onRetry={() => showPractice(practice.index)} onReveal={() => setPractice({ ...practice, revealed: true })} onNext={() => showPractice(practice.index + 1)} onExit={() => setPractice(undefined)} />}
+        {game.status === "complete" && !practice && <Postgame game={game} summary={summary} ply={review?.ply} practiceCount={coachedMoves.filter((move) => { const analysis = game.analysis[move.id]; return analysis?.status === "complete" && (analysis.verdict === "Mistake" || analysis.verdict === "Blunder"); }).length} onPractice={() => void startPractice()} onSelectPly={showPly} onReview={(fen, line) => setReview(reviewFromLine(fen, line))} />}
         <section className="moves-section"><div className="section-heading"><h2>{game.settings.mode === "bot" ? "Your coaching" : "Move-by-move coaching"}</h2><span>{coachedMoves.length} {coachedMoves.length === 1 ? "move" : "moves"}</span></div>
           {!coachedMoves.length && <div className="empty"><span>♙</span><h3>Your first lesson starts with your first move.</h3><p>Click or drag a piece. Legal destinations will light up.</p></div>}
           <div className="move-feed">{[...coachedMoves].reverse().map((move) => <MoveCard key={move.id} game={game} moveId={move.id} provider={provider} stockfish={stockfish} onReview={(line) => setReview(reviewFromLine(move.beforeFen, line))} />)}</div>
@@ -245,6 +276,6 @@ function Verdict({ verdict, pending }: { verdict?: string; pending: boolean }) {
   return <span className={`verdict ${pending ? "pending" : verdict?.toLowerCase().replaceAll(" ", "-")}`}>{pending ? "Thinking" : friendly}</span>;
 }
 
-function Postgame({ game, summary, ply, onSelectPly, onReview }: { game: GameState; summary?: GameReviewSummary; ply?: number; onSelectPly: (ply: number) => void; onReview: (fen: string, line?: CandidateLine) => void }) {
-  return <section className="postgame"><div className="section-heading"><h2>Game review</h2><a href={`/api/games/${game.id}/pgn`} download>Export PGN</a></div><GameReview game={game} summary={summary} ply={ply} onSelect={onSelectPly} />{!summary ? <p>Building recap…</p> : <><h3>Key moments</h3><ul>{summary.keyMoments.map((item) => <li key={item}>{item}</li>)}</ul><h3>Practical lessons</h3><ul>{summary.lessons.map((item) => <li key={item}>{item}</li>)}</ul>{summary.missing > 0 && <small>{summary.missing} move(s) did not receive full engine analysis.</small>}</>}<button onClick={() => onReview(game.moves[0]?.beforeFen ?? new Chess().fen())}>Open a separate review board</button></section>;
+function Postgame({ game, summary, ply, practiceCount, onPractice, onSelectPly, onReview }: { game: GameState; summary?: GameReviewSummary; ply?: number; practiceCount: number; onPractice: () => void; onSelectPly: (ply: number) => void; onReview: (fen: string, line?: CandidateLine) => void }) {
+  return <section className="postgame"><div className="section-heading"><h2>Game review</h2><a href={`/api/games/${game.id}/pgn`} download>Export PGN</a></div><GameReview game={game} summary={summary} ply={ply} onSelect={onSelectPly} />{!summary ? <p>Building recap…</p> : <><h3>Key moments</h3><ul>{summary.keyMoments.map((item) => <li key={item}>{item}</li>)}</ul><h3>Practical lessons</h3><ul>{summary.lessons.map((item) => <li key={item}>{item}</li>)}</ul>{summary.missing > 0 && <small>{summary.missing} move(s) did not receive full engine analysis.</small>}</>}<div className="postgame-actions">{practiceCount > 0 && <button className="practice-start" onClick={onPractice}>Practice your mistakes ({practiceCount})</button>}<button onClick={() => onReview(game.moves[0]?.beforeFen ?? new Chess().fen())}>Open a separate review board</button></div></section>;
 }

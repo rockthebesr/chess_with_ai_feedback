@@ -111,6 +111,11 @@ const server = createServer(async (req, res) => {
         const input = z.object({ throughPly: z.number().int().nonnegative(), moves: z.array(z.object({ from: z.string(), to: z.string(), promotion: z.string().optional() })).max(20) }).parse(await body(req));
         return json(res, 200, games.review(gameId, input.throughPly, input.moves));
       }
+      if (req.method === "GET" && parts[3] === "practice" && parts.length === 4) return json(res, 200, games.practicePositions(gameId));
+      if (req.method === "POST" && parts[3] === "practice" && parts[4]) {
+        const { expectedRevision: _unused, ...attempt } = moveSchema.extend({ expectedRevision: z.number().optional() }).parse(await body(req));
+        return json(res, 200, await games.practiceAttempt(gameId, parts[4], attempt));
+      }
       if (req.method === "GET" && parts[3] === "summary") return json(res, 200, games.postgameSummary(gameId));
       if (req.method === "GET" && parts[3] === "pgn") {
         const game = games.get(gameId); if (!game) throw new ServiceError(404, "Game not found.");

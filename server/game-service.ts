@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Chess } from "chess.js";
 import type {
   AnalysisRecord, CoachingRecord, GameReviewSummary, GameSettings, GameState, GameSummary, MoveRecord,
-  ProviderStatus, ServerEvent,
+  PracticePosition, PracticeResult, ProviderStatus, ServerEvent,
 } from "../shared/types.js";
 import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
 import { fallbackCoaching, type CoachProvider } from "./coach.js";
@@ -50,6 +50,7 @@ function moveWinChanceLoss({ move, analysis }: { move: MoveRecord; analysis: Ana
   return winChanceLoss({ cp: analysis.beforeCp, mate: analysis.beforeMate }, { cp: analysis.afterCp, mate: analysis.afterMate }, move.mover) ?? 0;
 }
 
+const PRACTICE_ANALYSIS_MS = 600;
 const LIVE_ANALYSIS_MS = 450;
 const RECHECK_ANALYSIS_MS = 1500;
 // Moves this close to the inaccuracy line can flip between searches, so they are rechecked too.
@@ -414,6 +415,44 @@ export class GameService {
       keyMoments: keyMoments.length ? keyMoments : ["No major engine swing was recorded."], lessons, missing: game.moves.length - completed.length,
       accuracy: { white: averageAccuracy("white"), black: averageAccuracy("black") }, evaluation,
     };
+  }
+
+  practicePositions(id: string): PracticePosition[] {
+    return this.practiceMoves(this.requireGame(id)).map(({ move, analysis }) => ({
+      moveId: move.id, fen: move.beforeFen, mover: move.mover, playedSan: move.san, verdict: analysis.verdict, bestSan: analysis.alternatives[0]?.san[0],
+    }));
+  }
+
+  /** Scores a retry with a fresh engine search. It never touches the recorded game. */
+  async practiceAttempt(id: string, moveId: string, attempt: { from: string; to: string; promotion?: string }): Promise<PracticeResult> {
+    const target = this.practiceMoves(this.requireGame(id)).find((item) => item.move.id === moveId);
+    if (!target) throw new ServiceError(404, "That position is not available for practice.");
+    const { move, analysis } = target;
+    const board = new Chess(move.beforeFen);
+    const legalCount = board.moves().length;
+    let played;
+    try { played = board.move(attempt); } catch { throw new ServiceError(400, "That move is not legal in this position."); }
+    const san = played.san;
+    const uci = `${played.from}${played.to}${played.promotion ?? ""}`;
+    if (uci === move.uci) return { solved: false, san, explanation: `${san} is the move you played in the game. Look for something different.` };
+    const solved = (explanation: string): PracticeResult => ({ solved: true, san, explanation });
+    if (uci === analysis.alternatives[0]?.uci[0]) return solved(`${san} is the engine's top choice here. Well found.`);
+    const retried = await analyzeMove(this.analysisEngine, { ...move, id: `${move.id}:practice`, afterFen: board.fen(), san, uci }, legalCount, PRACTICE_ANALYSIS_MS);
+    const game = this.get(id);
+    if (!game || !this.isCurrentMove(game, move)) throw new ServiceError(409, "This game has changed. Reopen practice to continue.");
+    if (retried.status !== "complete") throw new ServiceError(503, "The engine could not check that move. Try again.");
+    if (retried.verdict === "Good move") return solved(`${san} keeps the position in good shape. Well found.`);
+    return { solved: false, san, explanation: `${san} would ${retried.verdict === "Analysis uncertain" ? "be hard to judge" : `be ${retried.verdict === "Inaccuracy" ? "an inaccuracy" : `a ${retried.verdict.toLowerCase()}`}`} here. Try another move.` };
+  }
+
+  /** Bad moves by the people playing, once the game is over and there is nothing left to give away. */
+  private practiceMoves(game: GameState): Array<{ move: MoveRecord; analysis: AnalysisRecord }> {
+    if (game.status !== "complete") return [];
+    return game.moves.flatMap((move) => {
+      const analysis = game.analysis[move.id];
+      const byPlayer = game.settings.mode === "local" || move.mover === game.settings.humanColor;
+      return byPlayer && analysis?.status === "complete" && (analysis.verdict === "Mistake" || analysis.verdict === "Blunder") ? [{ move, analysis }] : [];
+    });
   }
 
   private isCurrentMove(game: GameState, move: MoveRecord): boolean {

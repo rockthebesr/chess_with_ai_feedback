@@ -135,6 +135,11 @@ input:focus, select:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px 
 .postgame .review-move.inaccuracy { background: #f5e8c7; color: #87681f; }.postgame .review-move.mistake { background: #f6ded8; color: #a44232; }.postgame .review-move.blunder { background: #a44232; color: #fff; }.postgame .review-move.current { outline: 2px solid var(--gold); outline-offset: 1px; }
 .review-hint { color: var(--muted); font-size: .72rem; }
 
+.postgame-actions { display: flex; flex-wrap: wrap; gap: 8px; }.postgame .practice-start { background: #244d3b; border-color: #244d3b; color: #fff; }
+.practice-card { background: #fff7df; border: 1px solid #e4d3a6; border-radius: 14px; padding: 17px; font-size: .9rem; }.practice-card p { margin: 10px 0; }
+.practice-result { padding: 9px 11px; border-radius: 8px; background: #f6ded8; color: #7f3426; }.practice-result.solved { background: #e4f0e7; color: #2c6245; }
+.practice-actions { display: flex; flex-wrap: wrap; gap: 8px; }.practice-actions button { border: 1px solid var(--line); background: var(--paper); padding: 8px 11px; border-radius: 8px; color: #475149; }.practice-actions button.primary { background: #244d3b; border-color: #244d3b; color: #fff; }
+
 @media (max-width: 950px) { .play-layout { grid-template-columns: minmax(0, 680px); }.coach-column { max-height: none; overflow: visible; }.home-grid { grid-template-columns: 1fr; }.side-stack { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 951px) {
   .play-layout { height: calc(100dvh - 66px); padding-block: clamp(12px, 2vh, 30px); overflow: hidden; }

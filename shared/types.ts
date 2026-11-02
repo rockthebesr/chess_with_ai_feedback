@@ -131,6 +131,22 @@ export interface GameReviewSummary {
   evaluation: Array<{ ply: number; whiteWinChance: number }>;
 }
 
+/** A position from a finished game where the player went wrong, to try again. */
+export interface PracticePosition {
+  moveId: string;
+  fen: string;
+  mover: Color;
+  playedSan: string;
+  verdict: Verdict;
+  bestSan?: string;
+}
+
+export interface PracticeResult {
+  solved: boolean;
+  san: string;
+  explanation: string;
+}
+
 export interface ProviderStatus {
   available: boolean;
   authMode?: string;
