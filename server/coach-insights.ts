@@ -1,7 +1,7 @@
 import type { AnalysisRecord, MoveRecord, OpeningMatch, Verdict } from "../shared/types.js";
 import type { CoachingFacts } from "./coach-facts.js";
 
-export type InsightKind = "capture" | "loose-piece" | "rescue" | "fork" | "line-motif" | "check" | "castling" | "development" | "central-pawn" | "new-attack" | "opening" | "engine-alternative" | "opponent-reply" | "piece-scope";
+export type InsightKind = "capture" | "loose-piece" | "outranked-piece" | "rescue" | "fork" | "line-motif" | "check" | "castling" | "development" | "central-pawn" | "new-attack" | "opening" | "engine-alternative" | "opponent-reply" | "piece-scope";
 
 export interface VerifiedInsight {
   id: string;
@@ -33,6 +33,14 @@ export function buildVerifiedInsights(move: MoveRecord, analysis: AnalysisRecord
   if (exposedOwn) insights.push({ id: "exposed-piece", kind: "loose-piece", priority: unfavorable ? 96 : 75,
     explanation: `${move.san} left your ${exposedOwn.piece} on ${exposedOwn.square} attacked with no legal defender.`,
     lesson: `Before moving the ${facts.movingPiece}, check which piece or line it stops defending.`, evidenceIds: ["played_move", "newly_loose"] });
+  // Only for marked-down moves: on a good move the same geometry is usually a sound sacrifice.
+  if (unfavorable && facts.movedPieceOutranked && !facts.movedPieceLoose) insights.push({ id: "moved-piece-outranked", kind: "outranked-piece", priority: 97,
+    explanation: `After ${move.san}, your ${facts.movingPiece} on ${facts.to} can be captured by the ${facts.movedPieceOutranked.piece} on ${facts.movedPieceOutranked.square}. Having a defender does not help, because you would still lose the ${facts.movingPiece} for a cheaper piece.`,
+    lesson: `Before moving a ${facts.movingPiece}, check whether a cheaper enemy piece attacks the square, even if the square is defended.`, evidenceIds: ["piece_scope", "outranked"] });
+  const outrankedOwn = facts.newlyOutranked[0];
+  if (unfavorable && outrankedOwn) insights.push({ id: "exposed-to-cheaper-piece", kind: "outranked-piece", priority: 95,
+    explanation: `${move.san} left your ${outrankedOwn.piece} on ${outrankedOwn.square} attacked by the ${outrankedOwn.attacker} on ${outrankedOwn.attackerSquare}, a cheaper piece.`,
+    lesson: `Before moving the ${facts.movingPiece}, check which enemy lines it was blocking and what stands behind it.`, evidenceIds: ["played_move", "outranked"] });
   const rescuedOwn = facts.rescuedPieces.find((item) => item.color === facts.moverColor);
   if (rescuedOwn) insights.push({ id: "rescued-piece", kind: "rescue", priority: 80,
     explanation: `${move.san} removed the immediate loose-piece problem involving your ${rescuedOwn.piece}.`,

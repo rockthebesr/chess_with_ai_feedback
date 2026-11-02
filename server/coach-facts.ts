@@ -25,6 +25,10 @@ export interface CoachingFacts {
   newlyLoosePieces: Array<{ color: "w" | "b"; square: string; piece: string }>;
   rescuedPieces: Array<{ color: "w" | "b"; square: string; piece: string }>;
   lineMotifs: Array<{ type: "pin" | "skewer" | "x-ray"; frontSquare: string; frontPiece: string; behindSquare: string; behindPiece: string }>;
+  /** The moved piece can be taken by something cheaper, so a defender would not save the trade. */
+  movedPieceOutranked?: { square: string; piece: string };
+  /** Other pieces of the mover's that this move newly left attacked by something cheaper. */
+  newlyOutranked: Array<{ square: string; piece: string; attackerSquare: string; attacker: string }>;
   /** The engine's best answer to this move, replayed on the board. */
   reply?: { san: string; capturedPiece?: string; capturedSquare?: string; gaveCheck: boolean; materialLost: number };
   materialGain: number;
@@ -87,6 +91,19 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
   const looseAfterKeys = new Set(loosePieces.map(pieceKey));
   const newlyLoosePieces = loosePieces.filter((item) => !looseBeforeKeys.has(pieceKey(item)));
   const rescuedPieces = looseBefore.filter((item) => !looseAfterKeys.has(pieceKey(item)) && !(applied.captured && item.square === applied.to));
+  const movedValue = pieceValues[applied.promotion ?? applied.piece];
+  const cheapestOnMoved = cheapestCapturer(before, applied.to, opponent);
+  const movedPieceOutranked = applied.piece !== "k" && cheapestOnMoved && pieceValues[cheapestOnMoved.type] < movedValue && movedValue > (applied.captured ? pieceValues[applied.captured] : 0)
+    ? { square: cheapestOnMoved.square, piece: pieceNames[cheapestOnMoved.type] } : undefined;
+  const newlyOutranked = SQUARES.flatMap((square) => {
+    const target = before.get(square);
+    if (!target || target.color !== applied.color || target.type === "k" || square === applied.to) return [];
+    const now = cheapestCapturer(before, square, opponent);
+    if (!now || pieceValues[now.type] >= pieceValues[target.type]) return [];
+    const earlier = beforePosition.get(square)?.type === target.type ? cheapestCapturer(beforePosition, square, opponent) : undefined;
+    if (earlier && pieceValues[earlier.type] < pieceValues[target.type]) return [];
+    return [{ square, piece: pieceNames[target.type], attackerSquare: now.square, attacker: pieceNames[now.type] }];
+  });
   const lineMotifs = findLineMotifs(before, applied.to, applied.promotion ?? applied.piece, applied.color);
   const materialGain = applied.captured ? pieceValues[applied.captured] : 0;
   const materialSwing = materialBalance(afterCounts, applied.color) - materialBalance(beforeCounts, applied.color);
@@ -96,6 +113,7 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
   facts.push({ id: "piece_scope", text: `From ${applied.to}, the moved ${pieceNames[applied.promotion ?? applied.piece]} attacks ${movedPieceAttacks.length ? movedPieceAttacks.join(", ") : "no squares"}; it can legally be captured by ${movedPieceAttackers.length ? movedPieceAttackers.join(", ") : "no opponent piece"} and has ${movedPieceDefenders.length ? `legal defenders on ${movedPieceDefenders.join(", ")}` : "no legal defender"}.` });
   if (loosePieces.length) facts.push({ id: "loose_pieces", text: `Legally attacked and undefended pieces after the move: ${loosePieces.map((item) => `${colorNames[item.color]} ${item.piece} on ${item.square}`).join("; ")}.` });
   if (newlyLoosePieces.length) facts.push({ id: "newly_loose", text: `Pieces that became legally attacked and undefended on this move: ${newlyLoosePieces.map((item) => `${colorNames[item.color]} ${item.piece} on ${item.square}`).join("; ")}.` });
+  if (movedPieceOutranked || newlyOutranked.length) facts.push({ id: "outranked", text: `Pieces of the mover's attacked by something cheaper after the move: ${[...(movedPieceOutranked ? [`${pieceNames[applied.piece]} on ${applied.to} by the ${movedPieceOutranked.piece} on ${movedPieceOutranked.square}`] : []), ...newlyOutranked.map((item) => `${item.piece} on ${item.square} by the ${item.attacker} on ${item.attackerSquare}`)].join("; ")}.` });
   if (rescuedPieces.length) facts.push({ id: "rescued", text: `Pieces that are no longer both attacked and undefended: ${rescuedPieces.map((item) => `${colorNames[item.color]} ${item.piece} formerly on ${item.square}`).join("; ")}.` });
   if (lineMotifs.length) facts.push({ id: "line_motifs", text: `Verified line motifs created by the moved piece: ${lineMotifs.map((item) => `${item.type} through the ${item.frontPiece} on ${item.frontSquare} toward the ${item.behindPiece} on ${item.behindSquare}`).join("; ")}.` });
   facts.push({ id: "material_change", text: `The move changed ${colorNames[applied.color]}'s material balance by ${materialSwing} pawn-value units from captures or promotion.` });
@@ -110,7 +128,7 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
   if (opening) facts.push({ id: "opening", text: opening.guidanceAvailable
     ? `At this move the opening was ${opening.name}${opening.current ? "" : " (the game had left the named book line)"}. The mover's verified stored plan was: ${moverColor === "w" ? opening.plansWhite : opening.plansBlack}`
     : `At this move the position book identified ${opening.name}${opening.current ? "" : " before the game left the named line"}; no opening-specific strategic plan is stored.` });
-  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, reply, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
+  return { facts, moverColor, movingPiece: pieceNames[applied.piece], capturedPiece: applied.captured ? pieceNames[applied.captured] : undefined, from: applied.from, to: applied.to, beforeCounts, afterCounts, gaveCheck, promotionPiece, movedPieceAttacks, movedPieceAttackers, movedPieceDefenders, movedPieceLoose, newlyAttackedPieces, loosePieces, newlyLoosePieces, rescuedPieces, lineMotifs, movedPieceOutranked, newlyOutranked, reply, materialGain, materialSwing, developedFromHome, castled, centralPawnMove, supportsOwnKing: false };
 }
 
 export function factsPacket(facts: CoachingFacts): object {
@@ -157,6 +175,14 @@ function legalDefenders(chess: Chess, target: Square, color: "w" | "b"): string[
   clone.remove(target);
   clone.put({ type: "p", color: color === "w" ? "b" : "w" }, target);
   return legalCapturers(clone, target, color);
+}
+
+function cheapestCapturer(chess: Chess, target: Square, color: "w" | "b"): { square: string; type: string } | undefined {
+  const capturers = legalCapturers(chess, target, color).flatMap((square) => {
+    const piece = chess.get(square as Square);
+    return piece ? [{ square, type: piece.type }] : [];
+  });
+  return capturers.sort((a, b) => pieceValues[a.type] - pieceValues[b.type])[0];
 }
 
 function materialBalance(counts: Record<string, number>, color: "w" | "b"): number {

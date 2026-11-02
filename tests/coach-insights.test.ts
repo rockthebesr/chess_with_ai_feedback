@@ -73,6 +73,39 @@ describe("verified coaching insights", () => {
     expect(buildVerifiedInsights(pin, analysis(), pinFacts, undefined, false).some((item) => item.id === "line-motif")).toBe(true);
   });
 
+  describe("attacks by cheaper pieces", () => {
+    const insightsFor = (fen: string, from: string, to: string, verdict: AnalysisRecord["verdict"] = "Blunder") => {
+      const move = playedMove(fen, from, to); const result = analysis(verdict);
+      const facts = buildCoachingFacts(move, result);
+      return { facts, insights: buildVerifiedInsights(move, result, facts, undefined, false) };
+    };
+
+    it("flags a defended queen moved to a square a pawn attacks", () => {
+      const { facts, insights } = insightsFor("4k3/8/4p3/8/8/8/3Q4/3RK3 w - - 0 1", "d2", "d5");
+      expect(facts.movedPieceDefenders).toContain("d1");
+      expect(facts.movedPieceLoose).toBe(false);
+      expect(facts.movedPieceOutranked).toEqual({ square: "e6", piece: "pawn" });
+      expect(insights.find((item) => item.id === "moved-piece-outranked")?.explanation).toContain("captured by the pawn on e6");
+    });
+
+    it("does not flag an even trade or a good move", () => {
+      expect(insightsFor("4k3/8/4p3/3r4/8/8/8/3RK3 w - - 0 1", "d1", "d5").facts.movedPieceOutranked).toBeUndefined();
+      const sacrifice = insightsFor("4k3/8/4p3/8/8/8/3Q4/3RK3 w - - 0 1", "d2", "d5", "Good move");
+      expect(sacrifice.insights.some((item) => item.id === "moved-piece-outranked")).toBe(false);
+    });
+
+    it("flags a defended piece uncovered to a cheaper attacker", () => {
+      const { facts, insights } = insightsFor("4k3/6b1/8/8/8/8/1N6/R2QK3 w - - 0 1", "b2", "d3");
+      expect(facts.newlyOutranked).toEqual([{ square: "a1", piece: "rook", attackerSquare: "g7", attacker: "bishop" }]);
+      expect(insights.some((item) => item.id === "exposed-to-cheaper-piece")).toBe(true);
+    });
+
+    it("does not repeat a threat that existed before the move", () => {
+      const { facts } = insightsFor("4k3/6b1/8/8/8/8/8/R2QK2N w - - 0 1", "h1", "g3");
+      expect(facts.newlyOutranked).toEqual([]);
+    });
+  });
+
   describe("what the move allows", () => {
     const fen = "4k3/8/8/3p4/8/2N5/8/4K3 w - - 0 1";
     const bad = (uci: string[], extra: Partial<AnalysisRecord> = {}): AnalysisRecord => ({ ...analysis("Blunder"), continuation: { id: "reply", uci, san: [] }, ...extra });
