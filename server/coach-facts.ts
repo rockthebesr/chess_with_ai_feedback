@@ -34,6 +34,10 @@ export interface CoachingFacts {
     behindSquare: string;
     behindPiece: string;
   }>;
+  /** The engine's preferred move instead of this one, replayed on the board. */
+  bestAlternative?: { san: string; capturedPiece?: string; capturedSquare?: string; materialWon: number };
+  /** The mover's pieces that were already attacked with no defender, and still are after this move. */
+  ignoredThreats: Array<{ color: "w" | "b"; square: string; piece: string }>;
   /** Pieces the moved piece really threatens at once: the king, undefended pieces, or pieces worth more than it. */
   forkTargets: Array<{ square: string; piece: string }>;
   /** The moved piece can be taken by something cheaper, so a defender would not save the trade. */
@@ -210,6 +214,13 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
       text: `The move advanced the ${applied.from[0]}-pawn from ${applied.from} to ${applied.to}.`,
     });
   const reply = replayReply(move.afterFen, analysis, moverColor);
+  const bestAlternative = replayBest(move, analysis, moverColor);
+  const ignoredThreats = looseBefore.filter((item) => item.color === moverColor && looseAfterKeys.has(pieceKey(item)));
+  if (ignoredThreats.length)
+    facts.push({
+      id: "ignored_threats",
+      text: `Pieces of the mover's already attacked with no defender, and still so after the move: ${ignoredThreats.map((item) => `${item.piece} on ${item.square}`).join("; ")}.`,
+    });
   const best = analysis.alternatives[0];
   if (best?.san[0])
     facts.push({
@@ -252,6 +263,8 @@ export function buildCoachingFacts(move: MoveRecord, analysis: AnalysisRecord, o
     movedPieceOutranked,
     newlyOutranked,
     reply,
+    bestAlternative,
+    ignoredThreats,
     materialSwing,
     developedFromHome,
     castled,
@@ -266,13 +279,19 @@ export function factsPacket(facts: CoachingFacts): object {
   };
 }
 
-function replayReply(afterFen: string, analysis: AnalysisRecord, moverColor: "w" | "b"): CoachingFacts["reply"] {
-  const line = analysis.continuation?.uci ?? [];
-  if (!line.length) return undefined;
-  const board = new Chess(afterFen);
-  const start = materialBalance(inventory(board), moverColor);
+/**
+ * Replays an engine line on the board. A line can stop mid-exchange, so a material change only counts if it
+ * holds both at the last quiet move and at the end of the line.
+ */
+function replayLine(
+  fen: string,
+  line: string[],
+  perspective: "w" | "b",
+): { first: Move; materialChange: number } | undefined {
+  const board = new Chess(fen);
+  const start = materialBalance(inventory(board), perspective);
   let first: Move | undefined;
-  let materialLost = 0;
+  let materialChange = 0;
   for (const uci of line) {
     let played: Move;
     try {
@@ -281,16 +300,43 @@ function replayReply(afterFen: string, analysis: AnalysisRecord, moverColor: "w"
       break;
     }
     first ??= played;
-    // A line can stop mid-exchange, so only count material once a quiet move shows the trades have finished.
-    if (!played.captured) materialLost = start - materialBalance(inventory(board), moverColor);
+    if (!played.captured) materialChange = materialBalance(inventory(board), perspective) - start;
   }
-  if (!first) return undefined;
+  const atEnd = materialBalance(inventory(board), perspective) - start;
+  const holds = materialChange * atEnd > 0;
+  return (
+    first && { first, materialChange: !holds ? 0 : Math.abs(atEnd) < Math.abs(materialChange) ? atEnd : materialChange }
+  );
+}
+
+function replayReply(afterFen: string, analysis: AnalysisRecord, moverColor: "w" | "b"): CoachingFacts["reply"] {
+  const replayed = replayLine(afterFen, analysis.continuation?.uci ?? [], moverColor);
+  if (!replayed) return undefined;
+  const { first } = replayed;
   return {
     san: first.san,
     capturedPiece: first.captured ? pieceNames[first.captured] : undefined,
     capturedSquare: first.captured ? first.to : undefined,
     gaveCheck: first.san.includes("+") || first.san.includes("#"),
-    materialLost: Math.max(0, materialLost),
+    materialLost: Math.max(0, -replayed.materialChange),
+  };
+}
+
+function replayBest(
+  move: MoveRecord,
+  analysis: AnalysisRecord,
+  moverColor: "w" | "b",
+): CoachingFacts["bestAlternative"] {
+  const line = analysis.alternatives[0]?.uci ?? [];
+  if (line[0] === move.uci) return undefined;
+  const replayed = replayLine(move.beforeFen, line, moverColor);
+  if (!replayed) return undefined;
+  const { first } = replayed;
+  return {
+    san: first.san,
+    capturedPiece: first.captured ? pieceNames[first.captured] : undefined,
+    capturedSquare: first.captured ? first.to : undefined,
+    materialWon: Math.max(0, replayed.materialChange),
   };
 }
 

@@ -159,6 +159,75 @@ describe("verified coaching insights", () => {
     });
   });
 
+  describe("what the player missed", () => {
+    const withBest = (
+      fen: string,
+      from: string,
+      to: string,
+      best: string[],
+      hintsVisible: boolean,
+      extra: Partial<AnalysisRecord> = {},
+    ) => {
+      const move = playedMove(fen, from, to);
+      const result: AnalysisRecord = {
+        ...analysis("Inaccuracy"),
+        alternatives: [{ id: "v1", uci: best, san: [] }],
+        ...extra,
+      };
+      return buildVerifiedInsights(move, result, buildCoachingFacts(move, result), undefined, hintsVisible);
+    };
+    const reported = "2rq1rk1/1p1n1ppp/2p5/2bnpN2/p7/1P1P2P1/P1P2PBP/R1B1QRK1 w - - 1 16";
+
+    it("names the capture the engine preferred when hints are visible, without inventing a material gain", () => {
+      const [top] = withBest(reported, "c1", "b2", ["b3a4", "c8a8", "a1b1", "a8a4"], true);
+      expect(top.explanation).toBe("The engine preferred bxa4, capturing the pawn on a4.");
+    });
+
+    it("hides the capture when hints are hidden", () => {
+      const [top] = withBest(reported, "c1", "b2", ["b3a4"], false);
+      expect(top.explanation).toBe("A stronger capture was available than Bb2.");
+      expect(top.explanation).not.toMatch(/a4/);
+    });
+
+    it("counts material once the line settles", () => {
+      const [top] = withBest("4k3/8/8/3p4/4P3/5P2/7P/4K3 w - - 0 1", "h2", "h3", ["e4d5", "e8e7"], true);
+      expect(top.explanation).toBe(
+        "The engine preferred exd5, capturing the pawn on d5, which comes out about 1 point of material ahead.",
+      );
+    });
+
+    it("does not call the played move a missed capture", () => {
+      const insights = withBest("4k3/8/8/3p4/4P3/8/7P/4K3 w - - 0 1", "e4", "d5", ["e4d5"], true);
+      expect(insights.some((item) => item.id === "missed-capture")).toBe(false);
+    });
+
+    it("flags a piece that was already hanging and still is", () => {
+      const insights = withBest("4kb2/8/8/8/8/N7/7P/4K3 w - - 0 1", "h2", "h3", ["a3b5"], false);
+      expect(insights[0].explanation).toBe(
+        "h3 left your knight on a3 attacked with no defender, as it already was before the move.",
+      );
+    });
+
+    it("does not call a piece that moved away ignored", () => {
+      const insights = withBest("4kb2/8/8/8/8/N7/7P/4K3 w - - 0 1", "a3", "b1", ["a3b5"], false);
+      expect(insights.some((item) => item.id === "ignored-threat")).toBe(false);
+    });
+
+    it("calls out a missed forced mate, naming it only when hints are visible", () => {
+      const mate = { beforeMate: 2, afterCp: 300 };
+      const fen = "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1";
+      expect(withBest(fen, "h2", "h3", ["a1a8"], true, mate)[0].explanation).toBe(
+        "The engine found a forced mate in 2, starting with Ra8#.",
+      );
+      expect(withBest(fen, "h2", "h3", ["a1a8"], false, mate)[0].explanation).toBe("h3 missed a forced mate.");
+      expect(
+        withBest(fen, "h2", "h3", ["a1a8"], true, { beforeMate: 2, afterMate: 1 }).some(
+          (item) => item.id === "missed-mate",
+        ),
+      ).toBe(false);
+    });
+  });
+
   describe("attacks by cheaper pieces", () => {
     const insightsFor = (fen: string, from: string, to: string, verdict: AnalysisRecord["verdict"] = "Blunder") => {
       const move = playedMove(fen, from, to);

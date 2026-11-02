@@ -16,6 +16,8 @@ export type InsightKind =
   | "opening"
   | "engine-alternative"
   | "opponent-reply"
+  | "missed-opportunity"
+  | "ignored-threat"
   | "no-single-tactic"
   | "piece-scope";
 
@@ -39,6 +41,8 @@ const EXPLAINS_A_BAD_MOVE = new Set<InsightKind>([
   "outranked-piece",
   "opponent-reply",
   "engine-alternative",
+  "missed-opportunity",
+  "ignored-threat",
 ]);
 
 const values: Record<string, number> = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 0 };
@@ -200,7 +204,36 @@ export function buildVerifiedInsights(
       evidenceIds: ["played_move", "opening"],
     });
   }
-  if (hintsVisible && unfavorable && analysis.alternatives[0]?.san[0])
+  const missedMate = unfavorable ? missedMateInsight(move, analysis, facts, hintsVisible) : undefined;
+  if (missedMate) insights.push(missedMate);
+  const best = facts.bestAlternative;
+  const missedCapture = Boolean(unfavorable && best?.capturedPiece);
+  if (best?.capturedPiece && missedCapture) {
+    const gain = best.materialWon
+      ? `, which comes out about ${best.materialWon} ${best.materialWon === 1 ? "point" : "points"} of material ahead`
+      : "";
+    insights.push({
+      id: "missed-capture",
+      kind: "missed-opportunity",
+      priority: 92,
+      explanation: hintsVisible
+        ? `The engine preferred ${best.san}, capturing the ${best.capturedPiece} on ${best.capturedSquare}${gain}.`
+        : `A stronger capture was available than ${move.san}.`,
+      lesson: "At the start of each turn, look at every capture you have, even the ones that look like plain trades.",
+      evidenceIds: ["played_move", "best_alternative"],
+    });
+  }
+  const ignored = facts.ignoredThreats[0];
+  if (unfavorable && ignored)
+    insights.push({
+      id: "ignored-threat",
+      kind: "ignored-threat",
+      priority: 96,
+      explanation: `${move.san} left your ${ignored.piece} on ${ignored.square} attacked with no defender, as it already was before the move.`,
+      lesson: "Before choosing a move, check whether one of your pieces is already under attack.",
+      evidenceIds: ["played_move", "ignored_threats"],
+    });
+  if (hintsVisible && unfavorable && !missedCapture && analysis.alternatives[0]?.san[0])
     insights.push({
       id: "engine-alternative",
       kind: "engine-alternative",
@@ -242,6 +275,28 @@ export function buildVerifiedInsights(
     evidenceIds: ["played_move", "piece_scope"],
   });
   return insights.sort((a, b) => b.priority - a.priority);
+}
+
+function missedMateInsight(
+  move: MoveRecord,
+  analysis: AnalysisRecord,
+  facts: CoachingFacts,
+  hintsVisible: boolean,
+): VerifiedInsight | undefined {
+  const sign = facts.moverColor === "w" ? 1 : -1;
+  const hadMate = (analysis.beforeMate ?? 0) * sign;
+  if (hadMate <= 0 || (analysis.afterMate ?? 0) * sign > 0) return undefined;
+  return {
+    id: "missed-mate",
+    kind: "missed-opportunity",
+    priority: 102,
+    explanation:
+      hintsVisible && facts.bestAlternative
+        ? `The engine found a forced mate in ${hadMate}, starting with ${facts.bestAlternative.san}.`
+        : `${move.san} missed a forced mate.`,
+    lesson: "When the enemy king looks exposed, go through your checks before anything else.",
+    evidenceIds: ["played_move", "engine_verdict"],
+  };
 }
 
 /** Says what the move allows. With hints hidden it stays vague, because the reply may be a live next move. */
