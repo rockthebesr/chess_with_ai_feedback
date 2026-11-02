@@ -63,20 +63,24 @@ export function buildVerifiedInsights(
       id: "capture-result",
       kind: "capture",
       priority: unfavorable && expensiveCapture ? 100 : 62,
-      explanation: `${move.san} used your ${facts.movingPiece} to capture a ${facts.capturedPiece} on ${facts.to}.${facts.movedPieceLoose ? ` The ${facts.movingPiece} can now be captured and has no legal defender.` : ""}`,
-      lesson: expensiveCapture
-        ? `Before exchanging a ${facts.movingPiece} for a ${facts.capturedPiece}, check whether a forcing continuation wins enough material back.`
-        : `After a capture, check whether the ${facts.movingPiece} is safe on ${facts.to}.`,
+      explanation: `${move.san} used your ${facts.movingPiece} to capture a ${facts.capturedPiece} on ${facts.to}.${captureAftermath(facts, unfavorable, expensiveCapture)}`,
+      lesson:
+        !unfavorable && facts.movedPieceAttackers.length && !expensiveCapture
+          ? `When you start a trade, check who recaptures and where their piece ends up.`
+          : expensiveCapture
+            ? `Before exchanging a ${facts.movingPiece} for a ${facts.capturedPiece}, check whether a forcing continuation wins enough material back.`
+            : `After a capture, check whether the ${facts.movingPiece} is safe on ${facts.to}.`,
       evidenceIds: ["capture", "piece_scope"],
     });
   }
-  if (facts.movedPieceLoose)
+  // On a capture the aftermath is in the capture insight, and on a good move it's usually a trade, not a hanging piece.
+  if (facts.movedPieceLoose && (unfavorable || !facts.capturedPiece))
     insights.push({
       id: "moved-piece-loose",
       kind: "loose-piece",
       priority: unfavorable ? 98 : 78,
-      explanation: `After ${move.san}, your ${facts.movingPiece} on ${facts.to} can be captured and has no legal defender.`,
-      lesson: `Before placing a ${facts.movingPiece} there, count its legal attackers and defenders after the move.`,
+      explanation: `After ${move.san}, your ${facts.movingPiece} on ${facts.to} can be captured and has no defender.`,
+      lesson: `Before placing a ${facts.movingPiece} there, count what attacks and defends the square after the move.`,
       evidenceIds: ["piece_scope", "loose_pieces"],
     });
   const exposedOwn = facts.newlyLoosePieces.find((item) => item.color === facts.moverColor && item.square !== facts.to);
@@ -85,7 +89,7 @@ export function buildVerifiedInsights(
       id: "exposed-piece",
       kind: "loose-piece",
       priority: unfavorable ? 96 : 75,
-      explanation: `${move.san} left your ${exposedOwn.piece} on ${exposedOwn.square} attacked with no legal defender.`,
+      explanation: `${move.san} left your ${exposedOwn.piece} on ${exposedOwn.square} attacked with no defender.`,
       lesson: `Before moving the ${facts.movingPiece}, check which piece or line it stops defending.`,
       evidenceIds: ["played_move", "newly_loose"],
     });
@@ -126,7 +130,7 @@ export function buildVerifiedInsights(
       kind: "check",
       priority: 76,
       explanation: `${move.san} gives check, so the opponent must answer the king threat immediately.`,
-      lesson: "When you give check, look at every legal reply before assuming the attack continues.",
+      lesson: "When you give check, look at every reply before assuming the attack continues.",
       evidenceIds: ["played_move", "check"],
     });
   if (facts.castled)
@@ -163,7 +167,7 @@ export function buildVerifiedInsights(
       id: "new-piece-attack",
       kind: "new-attack",
       priority: 72,
-      explanation: `${move.san} places your ${facts.movingPiece} where it can legally capture the ${target.piece} on ${target.square}.`,
+      explanation: `${move.san} puts your ${facts.movingPiece} in position to attack the ${target.piece} on ${target.square}.`,
       lesson: `Check whether that ${target.piece} can move, be defended, or answer with a stronger threat.`,
       evidenceIds: ["played_move", "new_attacks"],
     });
@@ -181,7 +185,10 @@ export function buildVerifiedInsights(
         "For a fork to work, check whether either target can answer with check, capture the attacker, or save both pieces.",
       evidenceIds: ["played_move", "new_attacks"],
     });
-  const motif = facts.lineMotifs.find((item) => item.type !== "x-ray") ?? facts.lineMotifs[0];
+  // An x-ray through to a pawn threatens nothing worth a coaching point.
+  const motif =
+    facts.lineMotifs.find((item) => item.type !== "x-ray") ??
+    facts.lineMotifs.find((item) => item.behindPiece !== "pawn");
   // A piece that can be taken for free is not really pinning or skewering anything.
   if (motif && !facts.movedPieceLoose) {
     insights.push({
@@ -268,7 +275,7 @@ export function buildVerifiedInsights(
     id: "piece-scope",
     kind: "piece-scope",
     priority: 10,
-    explanation: `${move.san} moved your ${facts.movingPiece} from ${facts.from} to ${facts.to}.`,
+    explanation: `${move.san} holds the position. The engine found no real problem with it.`,
     lesson: facts.movedPieceAttacks.length
       ? `From ${facts.to}, check what changes on ${facts.movedPieceAttacks.slice(0, 3).join(", ")} before choosing your next plan.`
       : `Before the next move, check the opponent's checks, captures, and attacks on your ${facts.movingPiece}.`,
@@ -297,6 +304,15 @@ function missedMateInsight(
     lesson: "When the enemy king looks exposed, go through your checks before anything else.",
     evidenceIds: ["played_move", "engine_verdict"],
   };
+}
+
+function captureAftermath(facts: CoachingFacts, unfavorable: boolean, expensiveCapture: boolean): string {
+  if (unfavorable)
+    return facts.movedPieceLoose ? ` The ${facts.movingPiece} can now be captured and has no defender.` : "";
+  if (!facts.movedPieceAttackers.length) return "";
+  return expensiveCapture
+    ? ` The ${facts.movingPiece} can be recaptured, but the engine still rates the move as sound.`
+    : ` If your opponent recaptures, that's an even or better trade for you.`;
 }
 
 /** Says what the move allows. With hints hidden it stays vague, because the reply may be a live next move. */

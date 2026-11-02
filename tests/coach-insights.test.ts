@@ -159,6 +159,52 @@ describe("verified coaching insights", () => {
     });
   });
 
+  describe("wording", () => {
+    const insightsFor = (fen: string, from: string, to: string, verdict: AnalysisRecord["verdict"] = "Good move") => {
+      const move = playedMove(fen, from, to);
+      return buildVerifiedInsights(
+        move,
+        analysis(verdict),
+        buildCoachingFacts(move, analysis(verdict)),
+        undefined,
+        false,
+      );
+    };
+
+    it("does not make a good trade read like a hanging piece", () => {
+      // Nxc8 from the reported game: the rook can recapture, and that is simply a knight for a bishop.
+      const insights = insightsFor("2rq1rk1/1p1nbppp/2p5/3n1N2/p7/1P1P2P1/P1P2PBP/R1BQ1RK1 w - - 0 1", "f5", "e7");
+      expect(insights.some((item) => item.id === "moved-piece-loose")).toBe(false);
+      expect(insights.find((item) => item.id === "capture-result")?.explanation).toContain("even or better trade");
+    });
+
+    it("still warns about a loose capturing piece on a bad move", () => {
+      expect(insightsFor("r3k3/8/8/8/8/8/p7/R5K1 w - - 0 1", "a1", "a2", "Mistake").map((item) => item.id)).toContain(
+        "moved-piece-loose",
+      );
+    });
+
+    it("skips an x-ray that only points at a pawn", () => {
+      expect(
+        insightsFor("6k1/p7/1p6/8/8/8/8/4K1B1 w - - 0 1", "g1", "e3").some((item) => item.id === "line-motif"),
+      ).toBe(false);
+    });
+
+    it("avoids rules jargon and plain narration", () => {
+      const fens: Array<[string, string, string]> = [
+        ["rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2", "g1", "f3"],
+        ["4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1", "d2", "d3"],
+      ];
+      for (const [fen, from, to] of fens) {
+        for (const insight of insightsFor(fen, from, to))
+          expect(`${insight.explanation} ${insight.lesson}`).not.toMatch(/legal/i);
+      }
+      expect(insightsFor("4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1", "d2", "d3").at(-1)?.explanation).toBe(
+        "Qd3 holds the position. The engine found no real problem with it.",
+      );
+    });
+  });
+
   describe("what the player missed", () => {
     const withBest = (
       fen: string,
@@ -372,7 +418,7 @@ describe("verified coaching insights", () => {
     });
 
     it("words an x-ray correctly", () => {
-      const move = playedMove("6k1/p7/1p6/8/8/8/8/4K1B1 w - - 0 1", "g1", "e3");
+      const move = playedMove("6k1/b7/1n6/8/8/8/8/4K1B1 w - - 0 1", "g1", "e3");
       const insight = buildVerifiedInsights(
         move,
         analysis(),
