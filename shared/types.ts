@@ -4,7 +4,7 @@ export type Color = "white" | "black";
 export type Difficulty = "beginner" | "easy" | "medium" | "strong";
 export type BoardTheme = "forest" | "walnut" | "slate" | "contrast";
 export type PieceStyle = "classic" | "solid" | "letters";
-export type Verdict = "Good move" | "Inaccuracy" | "Mistake" | "Analysis uncertain";
+export type Verdict = "Good move" | "Inaccuracy" | "Mistake" | "Blunder" | "Analysis uncertain";
 
 export interface GameSettings {
   mode: GameMode;

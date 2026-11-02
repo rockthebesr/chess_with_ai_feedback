@@ -212,7 +212,7 @@ function MoveCard({ game, moveId, provider, stockfish, onReview }: { game: GameS
 }
 
 function Verdict({ verdict, pending }: { verdict?: string; pending: boolean }) {
-  const friendly = verdict === "Good move" ? "Nice move" : verdict === "Inaccuracy" ? "Could be better" : verdict === "Mistake" ? "Not a good move" : "Let's review";
+  const friendly = verdict === "Good move" ? "Nice move" : verdict === "Inaccuracy" ? "Could be better" : verdict === "Mistake" ? "Not a good move" : verdict === "Blunder" ? "Serious mistake" : "Let's review";
   return <span className={`verdict ${pending ? "pending" : verdict?.toLowerCase().replaceAll(" ", "-")}`}>{pending ? "Thinking" : friendly}</span>;
 }
 

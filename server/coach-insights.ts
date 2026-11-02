@@ -18,7 +18,7 @@ const values: Record<string, number> = { pawn: 1, knight: 3, bishop: 3, rook: 5,
 
 export function buildVerifiedInsights(move: MoveRecord, analysis: AnalysisRecord, facts: CoachingFacts, opening: OpeningMatch | undefined, hintsVisible: boolean): VerifiedInsight[] {
   const insights: VerifiedInsight[] = [];
-  const unfavorable = analysis.verdict === "Mistake" || analysis.verdict === "Inaccuracy";
+  const unfavorable = analysis.verdict === "Blunder" || analysis.verdict === "Mistake" || analysis.verdict === "Inaccuracy";
   if (facts.capturedPiece) {
     const expensiveCapture = (values[facts.movingPiece] ?? 0) > (values[facts.capturedPiece] ?? 0);
     insights.push({ id: "capture-result", kind: "capture", priority: unfavorable && expensiveCapture ? 100 : 62,

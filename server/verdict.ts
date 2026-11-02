@@ -3,6 +3,7 @@ import type { Verdict } from "../shared/types.js";
 export interface Score { cp?: number; mate?: number }
 
 const STILL_WINNING_CP = 700;
+const LOSING_MATE_CP = 300;
 
 export function whiteScore(score: Score, sideToMove: "w" | "b"): Score {
   const sign = sideToMove === "w" ? 1 : -1;
@@ -24,7 +25,8 @@ export function verdictFor(before: Score, after: Score, mover: "white" | "black"
   if (lossCp === undefined) return { verdict: "Analysis uncertain", note: "Comparable engine scores were unavailable." };
   if (lossCp <= 45) return { verdict: "Good move", lossCp };
   if (lossCp <= 130) return { verdict: "Inaccuracy", lossCp };
-  return { verdict: "Mistake", lossCp };
+  if (lossCp <= 300) return { verdict: "Mistake", lossCp };
+  return { verdict: "Blunder", lossCp };
 }
 
 /** Mate scores are compared by who is mating, never subtracted as centipawns. A score of 0 means the mover just delivered checkmate. */
@@ -35,10 +37,11 @@ function mateVerdict(before: Score, after: Score, mover: "white" | "black"): { v
   const hasMate = (after.mate ?? 0) * sign;
   if (hadMate > 0) {
     if (hasMate > 0) return { verdict: "Good move", note: hasMate < hadMate ? "The move keeps the forced mate on track." : "The move keeps a forced mate, though a faster one was available." };
-    if (hasMate < 0) return { verdict: "Mistake", note: "The move throws away a forced mate and allows one against you." };
+    if (hasMate < 0) return { verdict: "Blunder", note: "The move throws away a forced mate and allows one against you." };
     if (after.cp === undefined) return { verdict: "Analysis uncertain", note: "Comparable engine scores were unavailable." };
     if (after.cp * sign >= STILL_WINNING_CP) return { verdict: "Inaccuracy", note: "The move misses a forced mate, but the position is still winning." };
-    return { verdict: "Mistake", note: "The move misses a forced mate." };
+    if (after.cp * sign >= LOSING_MATE_CP) return { verdict: "Mistake", note: "The move misses a forced mate." };
+    return { verdict: "Blunder", note: "The move misses a forced mate and gives up the advantage." };
   }
   if (hadMate < 0) {
     if (hasMate >= 0) return { verdict: "Good move", note: "The move escapes a forced mate." };
@@ -46,5 +49,5 @@ function mateVerdict(before: Score, after: Score, mover: "white" | "black"): { v
     return { verdict: "Inaccuracy", note: "The position was already lost to a forced mate, but this move shortens the defense." };
   }
   if (hasMate > 0) return { verdict: "Good move", note: "The move creates a forced mate." };
-  return { verdict: "Mistake", note: "The move allows a forced mate according to the engine." };
+  return { verdict: "Blunder", note: "The move allows a forced mate according to the engine." };
 }

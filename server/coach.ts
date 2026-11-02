@@ -15,7 +15,7 @@ export const selectionSchema = {
   type: "object",
   properties: {
     moveId: { type: "string" },
-    verdict: { type: "string", enum: ["Good move", "Inaccuracy", "Mistake", "Analysis uncertain"] },
+    verdict: { type: "string", enum: ["Good move", "Inaccuracy", "Mistake", "Blunder", "Analysis uncertain"] },
     insightId: { type: "string" },
   },
   required: ["moveId", "verdict", "insightId"],

@@ -34,6 +34,6 @@ describe("analyzing finished games", () => {
     const move = playedMove("7k/8/5K2/6Q1/8/8/8/8 w - - 0 1", "g5", "g6");
     const { engine } = engineWith({ [move.beforeFen]: { mate: 1, moves: ["g5g7"] } });
     const result = await analyzeMove(engine, move, 20);
-    expect(result).toMatchObject({ status: "complete", verdict: "Mistake", afterCp: 0 });
+    expect(result).toMatchObject({ status: "complete", verdict: "Blunder", afterCp: 0 });
   });
 });

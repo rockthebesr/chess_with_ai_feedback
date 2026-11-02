@@ -352,7 +352,7 @@ export class GameService {
       .filter((item) => item.analysis.verdict !== "Good move")
       .sort((a, b) => (b.analysis.lossCp ?? 0) - (a.analysis.lossCp ?? 0))
       .slice(0, 3)
-      .map((item) => `${item.move.ply}. ${item.move.san}: ${item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`);
+      .map((item) => `${item.move.ply}. ${item.move.san}: ${item.analysis.verdict === "Blunder" ? "This move badly damaged the position" : item.analysis.verdict === "Mistake" ? "This move made the position much harder" : "This move could be improved"}`);
     const lessons = keyMoments.length
       ? ["At each critical turn, scan checks, captures, and threats before choosing a move.", "Review the alternatives on a separate board; the recorded game will not change."]
       : ["Development and king safety were the main practical themes."];

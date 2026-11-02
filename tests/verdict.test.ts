@@ -17,16 +17,22 @@ describe("score orientation and verdicts", () => {
   it("does not subtract mate scores as centipawns", () => {
     const result = verdictFor({ cp: 30 }, { mate: -2 }, "white");
     expect(result.lossCp).toBeUndefined();
-    expect(result.verdict).toBe("Mistake");
+    expect(result.verdict).toBe("Blunder");
   });
 
   it("judges a thrown-away forced mate instead of calling it uncertain", () => {
-    expect(verdictFor({ mate: 3 }, { cp: 200 }, "white").verdict).toBe("Mistake");
-    expect(verdictFor({ mate: -3 }, { cp: -200 }, "black").verdict).toBe("Mistake");
-    expect(verdictFor({ mate: 3 }, { mate: -2 }, "white").verdict).toBe("Mistake");
+    expect(verdictFor({ mate: 3 }, { cp: 400 }, "white").verdict).toBe("Mistake");
+    expect(verdictFor({ mate: -3 }, { cp: -400 }, "black").verdict).toBe("Mistake");
+    expect(verdictFor({ mate: 3 }, { cp: 200 }, "white").verdict).toBe("Blunder");
+    expect(verdictFor({ mate: 3 }, { mate: -2 }, "white").verdict).toBe("Blunder");
     const stillWinning = verdictFor({ mate: 3 }, { cp: 900 }, "white");
     expect(stillWinning.verdict).toBe("Inaccuracy");
     expect(stillWinning.note).toContain("still winning");
+  });
+
+  it("separates a blunder from an ordinary mistake", () => {
+    expect(verdictFor({ cp: 0 }, { cp: -200 }, "white").verdict).toBe("Mistake");
+    expect(verdictFor({ cp: 0 }, { cp: -900 }, "white").verdict).toBe("Blunder");
   });
 
   it("treats keeping, creating, and delivering mate as good moves", () => {
