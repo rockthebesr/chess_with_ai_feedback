@@ -89,6 +89,8 @@ export interface OpeningMatch {
 }
 
 export interface GameState {
+  /** Stored format version; see server/game-schema.ts. */
+  stateVersion?: number;
   id: string;
   branchId: string;
   revision: number;

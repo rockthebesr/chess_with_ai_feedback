@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { GameState, GameSummary } from "../shared/types.js";
+import { GAME_STATE_VERSION, parseGameState } from "./game-schema.js";
 
 export function defaultDataDir(): string {
   if (process.env.CHESS_COACH_DATA_DIR) return process.env.CHESS_COACH_DATA_DIR;
@@ -13,6 +14,8 @@ export class Storage {
   readonly dataDir: string;
   readonly databasePath: string;
   private readonly db: DatabaseSync;
+  /** Rows that failed to load. They stay untouched on disk but are hidden, so one bad game can't take the app down. */
+  private readonly unreadable = new Set<string>();
 
   constructor(dataDir = defaultDataDir()) {
     this.dataDir = dataDir;
@@ -58,7 +61,8 @@ export class Storage {
   private recoverPending(): void {
     const rows = this.db.prepare("SELECT id, state_json FROM games").all() as Array<{ id: string; state_json: string }>;
     for (const row of rows) {
-      const game = JSON.parse(row.state_json) as GameState;
+      const game = this.parseRow(row.id, row.state_json);
+      if (!game) continue;
       let changed = false;
       for (const record of Object.values(game.analysis)) {
         if (record.status === "pending") { record.status = "unavailable"; record.note = "Analysis was interrupted by an app restart."; changed = true; }
@@ -72,7 +76,20 @@ export class Storage {
     }
   }
 
+  private parseRow(id: string, json: string): GameState | undefined {
+    try {
+      const game = parseGameState(json);
+      this.unreadable.delete(id);
+      return game;
+    } catch (error) {
+      if (!this.unreadable.has(id)) console.warn(`Skipping saved game ${id}: ${error instanceof Error ? error.message : "it could not be read"}`);
+      this.unreadable.add(id);
+      return undefined;
+    }
+  }
+
   saveGame(game: GameState): void {
+    game.stateVersion = GAME_STATE_VERSION;
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare(`INSERT INTO games
@@ -106,12 +123,12 @@ export class Storage {
 
   loadGame(id: string): GameState | undefined {
     const row = this.db.prepare("SELECT state_json FROM games WHERE id = ?").get(id) as { state_json: string } | undefined;
-    return row ? JSON.parse(row.state_json) as GameState : undefined;
+    return row ? this.parseRow(id, row.state_json) : undefined;
   }
 
   listGames(): GameSummary[] {
     return (this.db.prepare(`SELECT id,white_name,black_name,mode,status,result,move_count,updated_at
-      FROM games ORDER BY updated_at DESC`).all() as Array<Record<string, string | number>>).map((row) => ({
+      FROM games ORDER BY updated_at DESC`).all() as Array<Record<string, string | number>>).filter((row) => !this.unreadable.has(String(row.id))).map((row) => ({
         id: String(row.id), whiteName: String(row.white_name), blackName: String(row.black_name),
         mode: row.mode as GameSummary["mode"], status: row.status as GameSummary["status"],
         result: String(row.result), moveCount: Number(row.move_count), updatedAt: String(row.updated_at),
