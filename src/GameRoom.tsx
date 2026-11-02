@@ -76,6 +76,7 @@ export function GameRoom({ game, provider, stockfish, error, setError, onGame, o
     const fen = move?.afterFen ?? game.moves[0]?.beforeFen ?? new Chess().fen();
     setReview({ fen, legalMoves: legalFor(new Chess(fen)), label: move ? stepLabel(game, move) : "Starting position", ply: target, lastMove: move && { from: move.uci.slice(0, 2), to: move.uci.slice(2, 4) } });
   };
+  // Runs after every render so the handler always sees the latest game and analysis.
   useEffect(() => {
     if (game.status !== "complete" || practice) return;
     const onKey = (event: KeyboardEvent) => {
@@ -88,7 +89,7 @@ export function GameRoom({ game, provider, stockfish, error, setError, onGame, o
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [game.status, game.moves, review?.ply, practice]);
+  });
   // Refetch as verdicts land: the last live analysis and the post-game recheck both arrive after the game ends.
   const verdicts = game.moves.map((move) => game.analysis[move.id]?.verdict).join();
   useEffect(() => {

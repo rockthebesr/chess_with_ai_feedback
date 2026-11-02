@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Chess } from "chess.js";
+import { Chess, type Move } from "chess.js";
 import type {
   AnalysisRecord, CoachingRecord, GameReviewSummary, GameSettings, GameState, GameSummary, MistakePattern, MoveRecord,
   PlayerPatterns, PracticePosition, PracticeResult, ProviderStatus, ServerEvent,
@@ -8,7 +8,7 @@ import { analyzeMove, chooseBotMove, playerForTurn } from "./analysis.js";
 import { fallbackCoaching, type CoachProvider } from "./coach.js";
 import { recognizeOpening } from "./openings.js";
 import { classifyMistake, summarizePatterns } from "./patterns.js";
-import { Storage } from "./storage.js";
+import type { Storage } from "./storage.js";
 import type { UciEngine } from "./uci.js";
 import { moveAccuracy, winChance, winChanceLoss } from "./verdict.js";
 
@@ -134,7 +134,7 @@ export class GameService {
     const chess = chessFor(game);
     const beforeFen = chess.fen();
     const beforeLegalCount = chess.moves().length;
-    let applied;
+    let applied: Move;
     try { applied = chess.move({ from: intent.from, to: intent.to, promotion: intent.promotion }); }
     catch { throw new ServiceError(400, "That move is not legal in the current position."); }
     const moveRevision = game.revision + 1;
@@ -186,7 +186,7 @@ export class GameService {
     const moves = this.get(gameId)?.moves ?? [];
     for (const move of moves) {
       const current = this.get(gameId)?.analysis[move.id];
-      if (!current || current.status !== "complete" || !this.worthRechecking(move, current)) continue;
+      if (current?.status !== "complete" || !this.worthRechecking(move, current)) continue;
       const rechecked = await analyzeMove(this.analysisEngine, move, new Chess(move.beforeFen).moves().length, RECHECK_ANALYSIS_MS);
       const game = this.get(gameId);
       if (!game || game.branchId !== branchId || !this.isCurrentMove(game, move)) return;
@@ -445,7 +445,7 @@ export class GameService {
     const { move, analysis } = target;
     const board = new Chess(move.beforeFen);
     const legalCount = board.moves().length;
-    let played;
+    let played: Move;
     try { played = board.move(attempt); } catch { throw new ServiceError(400, "That move is not legal in this position."); }
     const san = played.san;
     const uci = `${played.from}${played.to}${played.promotion ?? ""}`;

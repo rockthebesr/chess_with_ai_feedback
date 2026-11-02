@@ -85,7 +85,7 @@ describe("authoritative game service", () => {
     let cancelled = false;
     const coach: CoachProvider = {
       status: () => ({ available: true, model: "mock" }), initialize: async () => ({ available: true }),
-      coach: async (_game, move) => await new Promise((resolve) => { finish = (value) => resolve(value); }),
+      coach: async () => await new Promise((resolve) => { finish = (value) => resolve(value); }),
       followUp: async () => "", cancel: async () => { cancelled = true; }, close: () => undefined,
     };
     const service = new GameService(storage, coach, undefined, undefined, () => undefined);

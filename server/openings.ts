@@ -41,7 +41,7 @@ function guidance(name: string, color: "white" | "black"): string | undefined {
 export function recognizeOpening(sans: string[]): OpeningMatch | undefined {
   const chess = new Chess();
   for (const san of sans) { try { chess.move(san); } catch { break; } }
-  let current = chess;
+  const current = chess;
   let movesBack = 0;
   let match = pickBest(positions.get(positionKey(current.fen())) ?? []);
   // If play leaves theory, preserve the deepest known opening rather than falling back

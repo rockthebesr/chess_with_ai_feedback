@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { GameSettings, GameState, GameSummary, ProviderStatus, ServerEvent } from "../shared/types";
+import type { GameState, GameSummary, ProviderStatus, ServerEvent } from "../shared/types";
 import { api, connectEvents } from "./api";
 import { GameRoom } from "./GameRoom";
 import { Home } from "./Home";

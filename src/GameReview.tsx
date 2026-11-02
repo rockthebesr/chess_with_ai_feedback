@@ -24,7 +24,10 @@ function EvaluationGraph({ game, summary, ply, onSelect }: { game: GameState; su
     <line className="eval-mid" x1="0" x2={GRAPH_WIDTH} y1={GRAPH_HEIGHT / 2} y2={GRAPH_HEIGHT / 2} />
     <polyline className="eval-line" points={line} vectorEffect="non-scaling-stroke" />
     {ply !== undefined && <line className="eval-marker" x1={x(ply)} x2={x(ply)} y1="0" y2={GRAPH_HEIGHT} vectorEffect="non-scaling-stroke" />}
-    {game.moves.map((move) => <rect key={move.id} className="eval-hit" x={x(move.ply - 0.5)} y="0" width={GRAPH_WIDTH / count} height={GRAPH_HEIGHT} onClick={() => onSelect(move.ply)}><title>{moveLabel(move)}</title></rect>)}
+    {game.moves.map((move) => (
+      // biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut; the move list beside the graph is the keyboard path.
+      <rect key={move.id} className="eval-hit" x={x(move.ply - 0.5)} y="0" width={GRAPH_WIDTH / count} height={GRAPH_HEIGHT} onClick={() => onSelect(move.ply)}><title>{moveLabel(move)}</title></rect>
+    ))}
   </svg>;
 }
 

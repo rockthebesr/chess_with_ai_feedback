@@ -14,11 +14,11 @@ npm test            # vitest run
 npx vitest run tests/verdict.test.ts      # one file
 npx vitest run -t "test name substring"   # one test
 npm run typecheck   # strict tsc for frontend and server; does not include tests/
+npm run lint        # biome lint; CI runs this, typecheck, tests, and build on every push
+npm run format      # biome format --write .
 npm run build       # tsc to dist-server/ + vite build to dist/
 npm start           # production-style on :4173; runs server/index.ts via tsx and serves dist/
 ```
-
-There is no linter or formatter configured.
 
 Optional external tools: `brew install stockfish`; Ollama with `gemma3:4b`; the Codex CLI signed in with ChatGPT. The app runs without any of them, using fallbacks.
 

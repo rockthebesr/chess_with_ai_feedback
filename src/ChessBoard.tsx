@@ -38,9 +38,11 @@ export function ChessBoard({ fen, orientation, legalMoves, lastMove, disabled, t
   const isTransitioning = flipStage !== "idle";
   const chess = useMemo(() => new Chess(fen), [fen]);
   const bySquare = new Map<string, { color: string; type: string }>();
-  chess.board().forEach((row, rankIndex) => row.forEach((piece, fileIndex) => {
-    if (piece) bySquare.set(`${"abcdefgh"[fileIndex]}${8 - rankIndex}`, piece);
-  }));
+  chess.board().forEach((row, rankIndex) => {
+    row.forEach((piece, fileIndex) => {
+      if (piece) bySquare.set(`${"abcdefgh"[fileIndex]}${8 - rankIndex}`, piece);
+    });
+  });
   const ranks = displayOrientation === "white" ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
   const files = displayOrientation === "white" ? [..."abcdefgh"] : [..."hgfedcba"];
   const destinations = selected ? new Set(legalMoves.filter((move) => move.from === selected).map((move) => move.to)) : new Set<string>();
@@ -65,7 +67,7 @@ export function ChessBoard({ fen, orientation, legalMoves, lastMove, disabled, t
 
   const pieceGlyph = (color: string, type: string) => pieceStyle === "classic" ? pieces[`${color}${type}`] : pieceStyle === "solid" ? solidPieces[type] : letterPieces[type];
 
-  return <div className={`board-wrap theme-${theme} pieces-${pieceStyle}${flipStage === "rotating" ? " is-flipping" : ""}${flipStage === "settling" ? " is-settling" : ""}`} aria-label={`Chess board, ${displayOrientation} side facing you`} aria-busy={isTransitioning}>
+  return <section className={`board-wrap theme-${theme} pieces-${pieceStyle}${flipStage === "rotating" ? " is-flipping" : ""}${flipStage === "settling" ? " is-settling" : ""}`} aria-label={`Chess board, ${displayOrientation} side facing you`} aria-busy={isTransitioning}>
     <div className="board">
       {ranks.flatMap((rank) => files.map((file) => {
         const square = `${file}${rank}`;
@@ -92,5 +94,5 @@ export function ChessBoard({ fen, orientation, legalMoves, lastMove, disabled, t
           <span className={`piece ${chess.turn()} ${pieceStyle}`}>{pieceGlyph(chess.turn(), type)}</span>
         </button>)}<button className="cancel" onClick={() => setPromotion(undefined)}>Cancel</button></div>
     </div>}
-  </div>;
+  </section>;
 }
